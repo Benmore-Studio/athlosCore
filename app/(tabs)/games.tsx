@@ -1,22 +1,23 @@
+import VideoPlayer from '@/components/ui/videoPlayer';
+import Button from '@/components/ui/button';
+import Card from '@/components/ui/card';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import PlayerAvatar from '@/components/ui/playerAvatar';
+import { BorderRadius, Colors, Layout, Spacing, Typography } from '@/constants/theme';
+import { mockCoach, mockGames, mockTeams } from '@/data/mockData';
+import { useResponsive } from '@/hooks/useResponsive';
+import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
   Image,
   Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Typography, Spacing, BorderRadius, Layout } from '@/constants/theme';
-import { mockGames, mockTeams, mockCoach } from '@/data/mockData';
-import Card from '@/components/ui/Card';
-import Button from '@/components/ui/Button';
-import PlayerAvatar from '@/components/ui/PlayerAvatar';
-import { useResponsive } from '@/hooks/useResponsive';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import VideoPlayer from '@/components/ui/VideoPlayer';
 
 export default function RecentGamesScreen() {
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);

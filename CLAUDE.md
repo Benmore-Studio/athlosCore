@@ -57,12 +57,12 @@ AthlosCore addresses key problems in basketball coaching:
 - ✅ Recent games screen
 - ✅ Responsive design for iPad landscape
 - ✅ Professional cleanup with SF Symbols
+- ✅ Video upload functionality (High Priority)
+- ✅ Video player interface
 
 **Pending Development:**
-- 🔄 Video upload functionality (High Priority)
 - 🔄 AI analysis engine integration (High Priority)
 - 🔄 Player analytics dashboard
-- 🔄 Video player interface
 - 🔄 Backend API integration (High Priority)
 - 🔄 Data export and reporting system
 - 🔄 Performance optimization

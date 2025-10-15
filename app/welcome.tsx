@@ -1,19 +1,19 @@
+import Button from '@/components/ui/button';
+import Card from '@/components/ui/card';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import PlayerAvatar from '@/components/ui/playerAvatar';
+import { BorderRadius, Colors, Layout, Spacing, Typography } from '@/constants/theme';
+import { mockCoach, onboardingSteps } from '@/data/mockData';
+import { useResponsive } from '@/hooks/useResponsive';
+import { router } from 'expo-router';
 import React from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
   SafeAreaView,
   ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
-import { router } from 'expo-router';
-import { Colors, Typography, Spacing, BorderRadius, Layout } from '@/constants/theme';
-import { onboardingSteps, mockCoach } from '@/data/mockData';
-import Button from '@/components/ui/Button';
-import Card from '@/components/ui/Card';
-import PlayerAvatar from '@/components/ui/PlayerAvatar';
-import { useResponsive } from '@/hooks/useResponsive';
-import { IconSymbol } from '@/components/ui/icon-symbol';
 
 export default function WelcomeScreen() {
   const { isTablet, isLandscape } = useResponsive();

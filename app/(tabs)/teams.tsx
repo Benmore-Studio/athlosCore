@@ -1,19 +1,18 @@
+import Button from '@/components/ui/button';
+import Card from '@/components/ui/card';
+import PlayerAvatar from '@/components/ui/playerAvatar';
+import { BorderRadius, Colors, Layout, Spacing, Typography } from '@/constants/theme';
+import { mockCoach, mockTeams } from '@/data/mockData';
+import { useResponsive } from '@/hooks/useResponsive';
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
   ScrollView,
+  StyleSheet,
+  Text,
   TouchableOpacity,
-  FlatList,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Typography, Spacing, BorderRadius, Layout } from '@/constants/theme';
-import { mockTeams, mockCoach } from '@/data/mockData';
-import Card from '@/components/ui/Card';
-import Button from '@/components/ui/Button';
-import PlayerAvatar from '@/components/ui/PlayerAvatar';
-import { useResponsive } from '@/hooks/useResponsive';
 
 export default function TeamSelectionScreen() {
   const [selectedTeamId, setSelectedTeamId] = useState(mockTeams[0].id);

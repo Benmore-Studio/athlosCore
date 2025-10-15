@@ -1,20 +1,20 @@
+import Button from '@/components/ui/button';
+import Card from '@/components/ui/card';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import PlayerAvatar from '@/components/ui/playerAvatar';
+import { BorderRadius, Colors, Layout, Spacing, Typography } from '@/constants/theme';
+import { mockCoach, mockGames, mockTeams } from '@/data/mockData';
+import { useResponsive } from '@/hooks/useResponsive';
+import { router } from 'expo-router';
 import React from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
   ScrollView,
+  StyleSheet,
+  Text,
   TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
-import { Colors, Typography, Spacing, BorderRadius, Layout } from '@/constants/theme';
-import { mockCoach, mockTeams, mockGames } from '@/data/mockData';
-import Card from '@/components/ui/Card';
-import Button from '@/components/ui/Button';
-import PlayerAvatar from '@/components/ui/PlayerAvatar';
-import { useResponsive } from '@/hooks/useResponsive';
-import { IconSymbol } from '@/components/ui/icon-symbol';
 
 export default function DashboardScreen() {
   const currentTeam = mockTeams[0];
