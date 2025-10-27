@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import VideoPlayer from '@/components/ui/videoPlayer';
+import VideoPlayer from '@/components/ui/VideoPlayer';
 import { fetchVideoById } from '@/services/videoService';
 import { Colors } from '@/constants/theme';
 

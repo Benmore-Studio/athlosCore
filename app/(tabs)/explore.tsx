@@ -1,7 +1,7 @@
-import Button from '@/components/ui/button';
-import Card from '@/components/ui/card';
+import Button from '@/components/ui/Button';
+import Card from '@/components/ui/Card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import PlayerAvatar from '@/components/ui/playerAvatar';
+import PlayerAvatar from '@/components/ui/PlayerAvatar';
 import { BorderRadius, Colors, Layout, Spacing, Typography } from '@/constants/theme';
 import { Player, mockCoach, mockPlayers } from '@/data/mockData';
 import { useResponsive } from '@/hooks/useResponsive';
