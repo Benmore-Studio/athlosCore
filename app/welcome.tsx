@@ -5,6 +5,7 @@ import PlayerAvatar from '@/components/ui/PlayerAvatar';
 import { BorderRadius, Colors, Layout, Spacing, Typography } from '@/constants/theme';
 import { mockCoach, onboardingSteps } from '@/data/mockData';
 import { useResponsive } from '@/hooks/useResponsive';
+import { StorageHelpers } from '@/utils/storage';
 import { router } from 'expo-router';
 import React from 'react';
 import {
@@ -18,11 +19,13 @@ import {
 export default function WelcomeScreen() {
   const { isTablet, isLandscape } = useResponsive();
 
-  const handleGetStarted = () => {
+  const handleGetStarted = async () => {
+    await StorageHelpers.setOnboardingComplete();
     router.push('/(tabs)');
   };
 
-  const handleSkipTutorial = () => {
+  const handleSkipTutorial = async () => {
+    await StorageHelpers.setOnboardingComplete();
     router.push('/(tabs)');
   };
 

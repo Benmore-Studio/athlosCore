@@ -1,10 +1,14 @@
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
+import EmptyState from '@/components/ui/EmptyState';
+import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import PlayerAvatar from '@/components/ui/PlayerAvatar';
 import { BorderRadius, Colors, Layout, Spacing, Typography } from '@/constants/theme';
 import { mockCoach, mockTeams } from '@/data/mockData';
 import { useResponsive } from '@/hooks/useResponsive';
-import React, { useState } from 'react';
+import { useTeamStore } from '@/stores';
+import { router } from 'expo-router';
+import React, { useEffect } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -15,18 +19,57 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function TeamSelectionScreen() {
-  const [selectedTeamId, setSelectedTeamId] = useState(mockTeams[0].id);
+  // Use Zustand store instead of local state
+  const selectedTeam = useTeamStore((state) => state.selectedTeam);
+  const teams = useTeamStore((state) => state.teams);
+  const isLoading = useTeamStore((state) => state.isLoading);
+  const setSelectedTeam = useTeamStore((state) => state.setSelectedTeam);
+  const setTeams = useTeamStore((state) => state.setTeams);
+  const setLoading = useTeamStore((state) => state.setLoading);
+
   const { isTablet, isLandscape } = useResponsive();
 
-  const selectedTeam = mockTeams.find(team => team.id === selectedTeamId);
+  // Initialize teams from mock data on mount
+  useEffect(() => {
+    const initializeTeams = async () => {
+      setLoading(true);
+      try {
+        // Set teams from mock data
+        setTeams(mockTeams);
+
+        // If no team is selected, select the first one
+        if (!selectedTeam && mockTeams.length > 0) {
+          setSelectedTeam(mockTeams[0]);
+        }
+      } catch (error) {
+        console.error('Error initializing teams:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initializeTeams();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount - Zustand selectors are stable
 
   const handleTeamSelect = (teamId: string) => {
-    setSelectedTeamId(teamId);
+    const team = teams.find(t => t.id === teamId);
+    if (team) {
+      setSelectedTeam(team);
+    }
   };
 
   const handleContinue = () => {
-    console.log('Continue with team:', selectedTeamId);
+    console.log('Continue with team:', selectedTeam?.id);
   };
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <LoadingSpinner message="Loading teams..." fullScreen />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -59,11 +102,20 @@ export default function TeamSelectionScreen() {
         </View>
 
         {/* Team Selection Grid */}
-        <View style={[
-          styles.teamsGrid,
-          isTablet && isLandscape && styles.tabletTeamsGrid
-        ]}>
-          {mockTeams.map((team) => (
+        {teams.length === 0 ? (
+          <EmptyState
+            icon="person.3.fill"
+            title="No Teams Yet"
+            description="Add your first team to start managing players and tracking games"
+            actionLabel="Create Team"
+            onAction={() => router.push('/(tabs)')}
+          />
+        ) : (
+          <View style={[
+            styles.teamsGrid,
+            isTablet && isLandscape && styles.tabletTeamsGrid
+          ]}>
+            {teams.map((team) => (
             <TouchableOpacity
               key={team.id}
               onPress={() => handleTeamSelect(team.id)}
@@ -76,7 +128,7 @@ export default function TeamSelectionScreen() {
                 variant="outlined"
                 style={[
                   styles.teamCard,
-                  selectedTeamId === team.id && styles.selectedTeamCard
+                  selectedTeam?.id === team.id && styles.selectedTeamCard
                 ]}
               >
                 {/* Team Header */}
@@ -127,7 +179,7 @@ export default function TeamSelectionScreen() {
                 </View>
 
                 {/* Selection Indicator */}
-                {selectedTeamId === team.id && (
+                {selectedTeam?.id === team.id && (
                   <View style={styles.selectedIndicator}>
                     <Text style={styles.selectedText}>✓ Selected</Text>
                   </View>
@@ -135,7 +187,8 @@ export default function TeamSelectionScreen() {
               </Card>
             </TouchableOpacity>
           ))}
-        </View>
+          </View>
+        )}
 
         {/* Selected Team Details */}
         {selectedTeam && (

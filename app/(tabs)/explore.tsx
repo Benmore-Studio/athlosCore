@@ -1,11 +1,13 @@
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import PlayerAvatar from '@/components/ui/PlayerAvatar';
 import { BorderRadius, Colors, Layout, Spacing, Typography } from '@/constants/theme';
 import { Player, mockCoach, mockPlayers } from '@/data/mockData';
 import { useResponsive } from '@/hooks/useResponsive';
-import React, { useState } from 'react';
+import { StorageHelpers } from '@/utils/storage';
+import React, { useEffect, useState } from 'react';
 import {
   Dimensions,
   ScrollView,
@@ -19,7 +21,36 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 export default function PlayerAnalytics() {
   const [selectedPlayer, setSelectedPlayer] = useState<Player>(mockPlayers[0]);
   const [selectedTimeframe, setSelectedTimeframe] = useState<'season' | 'last5' | 'last10'>('season');
+  const [isLoading, setIsLoading] = useState(true);
   const { isTablet, isLandscape } = useResponsive();
+
+  // Load saved player selection on mount
+  useEffect(() => {
+    const loadSavedPlayer = async () => {
+      try {
+        const savedPlayerId = await StorageHelpers.getSelectedPlayer();
+        if (savedPlayerId) {
+          // Find the player in mock data
+          const player = mockPlayers.find(p => p.id === savedPlayerId);
+          if (player) {
+            setSelectedPlayer(player);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading player:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadSavedPlayer();
+  }, []);
+
+  // Save player selection whenever it changes
+  const handlePlayerSelect = async (player: Player) => {
+    setSelectedPlayer(player);
+    await StorageHelpers.saveSelectedPlayer(player.id);
+  };
 
   const timeframes = [
     { id: 'season', label: 'Full Season' },
@@ -102,6 +133,14 @@ export default function PlayerAnalytics() {
     return areas.slice(0, 3); // Top 3 areas
   };
 
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <LoadingSpinner message="Loading analytics..." fullScreen />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
@@ -143,7 +182,7 @@ export default function PlayerAnalytics() {
             {mockPlayers.map((player) => (
               <TouchableOpacity
                 key={player.id}
-                onPress={() => setSelectedPlayer(player)}
+                onPress={() => handlePlayerSelect(player)}
                 style={[
                   styles.playerOption,
                   selectedPlayer.id === player.id && styles.selectedPlayerOption

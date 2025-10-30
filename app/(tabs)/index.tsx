@@ -149,21 +149,30 @@ export default function DashboardScreen() {
                 <Text style={styles.actionLabel}>Team Management</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.actionButton}>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => router.push('/(tabs)/explore')}
+              >
                 <View style={styles.actionIcon}>
                   <IconSymbol size={24} name="chart.bar.fill" color={Colors.textOnPrimary} />
                 </View>
                 <Text style={styles.actionLabel}>Statistics & Analytics</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.actionButton}>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => router.push('/video/upload')}
+              >
                 <View style={styles.actionIcon}>
                   <IconSymbol size={24} name="video.fill" color={Colors.textOnPrimary} />
                 </View>
                 <Text style={styles.actionLabel}>Upload Game Film</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.actionButton}>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => router.push('/(tabs)/games')}
+              >
                 <View style={styles.actionIcon}>
                   <IconSymbol size={24} name="magnifyingglass" color={Colors.textOnPrimary} />
                 </View>

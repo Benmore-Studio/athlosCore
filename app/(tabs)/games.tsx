@@ -1,6 +1,7 @@
 import VideoPlayer from '@/components/ui/VideoPlayer';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
+import EmptyState from '@/components/ui/EmptyState';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import PlayerAvatar from '@/components/ui/PlayerAvatar';
 import { BorderRadius, Colors, Layout, Spacing, Typography } from '@/constants/theme';
@@ -153,7 +154,16 @@ export default function RecentGamesScreen() {
           styles.gamesContainer,
           isTablet && isLandscape && styles.tabletGamesGrid
         ]}>
-          {mockGames.map((game) => {
+          {mockGames.length === 0 ? (
+            <EmptyState
+              icon="sportscourt.fill"
+              title="No Games Recorded"
+              description="Upload a game video to start tracking team performance and player statistics"
+              actionLabel="Upload First Game"
+              onAction={() => router.push('/video/upload')}
+            />
+          ) : (
+            mockGames.map((game) => {
             const gameResult = getGameResult(game);
             const isSelected = selectedGameId === game.id;
 
@@ -333,7 +343,8 @@ export default function RecentGamesScreen() {
                 </Card>
               </TouchableOpacity>
             );
-          })}
+          })
+          )}
         </View>
 
         {/* Season Summary Card */}

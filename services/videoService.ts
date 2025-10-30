@@ -1,13 +1,10 @@
 import { mockVideos } from '@/data/mockVideos';
 
 export const fetchVideos = async () => {
-  // simulate network delay
-  await new Promise((res) => setTimeout(res, 800));
   return mockVideos;
 };
 
 export const fetchVideoById = async (id: string) => {
-  await new Promise((res) => setTimeout(res, 800));
   return mockVideos.find((v) => v.id === id);
 };
 

@@ -1,17 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  View, 
-  Text, 
-  FlatList, 
-  TouchableOpacity, 
-  Image, 
-  ActivityIndicator, 
-  StyleSheet 
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  Image,
+  ActivityIndicator,
+  StyleSheet
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { fetchVideos } from '@/services/videoService';
 import { Colors, Typography, Spacing } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
+import EmptyState from '@/components/ui/EmptyState';
 
 export default function VideosScreen() {
   const router = useRouter();
@@ -59,8 +60,8 @@ export default function VideosScreen() {
     <View style={styles.container}>
       <View style={styles.topBar}>
         <Text style={styles.header}>🎬 Match Highlights</Text>
-        <TouchableOpacity 
-          style={styles.uploadButton} 
+        <TouchableOpacity
+          style={styles.uploadButton}
           onPress={() => router.push('/video/upload')}
         >
           <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
@@ -68,13 +69,23 @@ export default function VideosScreen() {
         </TouchableOpacity>
       </View>
 
-      <FlatList
-        data={videos}
-        keyExtractor={(item) => item.id}
-        renderItem={renderVideoCard}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 }}
-      />
+      {videos.length === 0 ? (
+        <EmptyState
+          icon="video.fill"
+          title="No Videos Yet"
+          description="Upload your first game film to get started with AI-powered analysis and insights"
+          actionLabel="Upload Video"
+          onAction={() => router.push('/video/upload')}
+        />
+      ) : (
+        <FlatList
+          data={videos}
+          keyExtractor={(item) => item.id}
+          renderItem={renderVideoCard}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 100 }}
+        />
+      )}
     </View>
   );
 }

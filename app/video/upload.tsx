@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,10 +9,14 @@ import {
   Alert,
   ScrollView,
   Animated,
+  SafeAreaView,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { Video } from "expo-av";
 import { Ionicons } from "@expo/vector-icons";
+import { router, useNavigation } from "expo-router";
+import { IconSymbol } from "@/components/ui/icon-symbol";
+import { Colors } from "@/constants/theme";
 
 export default function UploadScreen() {
   const [videoUri, setVideoUri] = useState<string | null>(null);
@@ -21,6 +25,35 @@ export default function UploadScreen() {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const progressAnim = new Animated.Value(0);
+  const navigation = useNavigation();
+
+  // Prevent back navigation during upload
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (!uploading) {
+        return;
+      }
+
+      // Prevent default behavior of leaving the screen
+      e.preventDefault();
+
+      // Prompt the user before leaving
+      Alert.alert(
+        'Upload in Progress',
+        'Are you sure you want to cancel the upload?',
+        [
+          { text: "Don't leave", style: 'cancel', onPress: () => {} },
+          {
+            text: 'Cancel Upload',
+            style: 'destructive',
+            onPress: () => navigation.dispatch(e.data.action),
+          },
+        ]
+      );
+    });
+
+    return unsubscribe;
+  }, [navigation, uploading]);
 
   const pickVideo = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -68,7 +101,19 @@ export default function UploadScreen() {
         clearInterval(interval);
         setTimeout(() => {
           setUploading(false);
-          Alert.alert("✅ Upload Complete", "Your video has been uploaded successfully!");
+          Alert.alert(
+            "✅ Upload Complete",
+            "Your video has been uploaded successfully!",
+            [
+              {
+                text: "OK",
+                onPress: () => {
+                  // Navigate to videos tab after successful upload
+                  router.push("/(tabs)/videos");
+                }
+              }
+            ]
+          );
           setVideoUri(null);
           setTitle("");
           setDescription("");
@@ -78,14 +123,42 @@ export default function UploadScreen() {
     }, 300);
   };
 
+  const handleCancel = () => {
+    if (videoUri || title || description) {
+      Alert.alert(
+        'Discard Changes?',
+        'Are you sure you want to go back? Your changes will be lost.',
+        [
+          { text: 'Keep Editing', style: 'cancel' },
+          {
+            text: 'Discard',
+            style: 'destructive',
+            onPress: () => router.back(),
+          },
+        ]
+      );
+    } else {
+      router.back();
+    }
+  };
+
   const progressWidth = progressAnim.interpolate({
     inputRange: [0, 100],
     outputRange: ["0%", "100%"],
   });
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.heading}>🎬 Upload New Video</Text>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#f9f9f9" }}>
+      <ScrollView contentContainerStyle={styles.container}>
+        {/* Header with Back Button */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleCancel} style={styles.backButton}>
+            <IconSymbol size={24} name="chevron.left" color="#222" />
+            <Text style={styles.backText}>Back</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.heading}>🎬 Upload New Video</Text>
 
       <TouchableOpacity style={styles.pickBtn} onPress={pickVideo}>
         <Ionicons name="cloud-upload-outline" size={22} color="#fff" />
@@ -134,7 +207,8 @@ export default function UploadScreen() {
           <Text style={styles.uploadBtnText}>Upload Video</Text>
         </TouchableOpacity>
       )}
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -143,6 +217,22 @@ const styles = StyleSheet.create({
     padding: 22,
     backgroundColor: "#f9f9f9",
     flexGrow: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+  },
+  backText: {
+    fontSize: 16,
+    color: "#222",
+    marginLeft: 4,
+    fontWeight: "500",
   },
   heading: {
     fontSize: 24,
