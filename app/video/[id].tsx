@@ -1,450 +1,1335 @@
-import Button from '@/components/ui/Button';
-import Card from '@/components/ui/Card';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import VideoPlayer from '@/components/ui/VideoPlayer';
-import { BorderRadius, Colors, Spacing, Typography } from '@/constants/theme';
-import { fetchVideoById } from '@/services/videoService';
-import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import {
-  Alert,
-  Image,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable, Alert } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  SlideInRight,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withSequence,
+} from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import VideoPlayer from '@/components/ui/videoPlayer';
+import Card from '@/components/ui/card';
+import PlayerAvatar from '@/components/ui/playerAvatar';
+import videoService from '@/services/api/videoService';
+import { Colors, DarkColors, Typography, Spacing, BorderRadius, Shadows, Gradients, Animation } from '@/constants/theme';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { ComponentErrorBoundary } from '@/components/component-error-boundary';
+import * as Sentry from '@sentry/react-native';
 
-export default function VideoDetailScreen() {
-  const { id } = useLocalSearchParams();
-  const [video, setVideo] = useState<any>(null);
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+interface VideoData {
+  id: string;
+  title: string;
+  description?: string;
+  streamUrl: string;
+  thumbnailUrl?: string;
+  duration?: string;
+  views?: number;
+  likes?: number;
+  shares?: number;
+  rating?: number;
+  uploadDate?: string;
+  uploader?: {
+    id: string;
+    name: string;
+    avatar?: string;
+    subscribers?: number;
+  };
+  timelineMarkers?: any[];
+  tags?: string[];
+  metadata?: any;
+}
+
+function VideoDetailScreenContent() {
+  const theme = useColorScheme() ?? 'light';
+  const isDark = theme === 'dark';
+  const currentColors = isDark ? DarkColors : Colors;
+  const router = useRouter();
+
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const [video, setVideo] = useState<VideoData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [liked, setLiked] = useState(false);
+  const [bookmarked, setBookmarked] = useState(false);
+
+  const likeScale = useSharedValue(1);
+  const bookmarkScale = useSharedValue(1);
 
   useEffect(() => {
-    loadVideo();
+    if (id) {
+      loadVideoData();
+    }
   }, [id]);
 
-  const loadVideo = async () => {
+  const loadVideoData = async () => {
     try {
       setLoading(true);
-      const data = await fetchVideoById(id as string);
-      setVideo(data);
-    } catch (error) {
-      console.error('Error loading video:', error);
-      Alert.alert('Error', 'Failed to load video');
+      setError(null);
+
+      // Fetch streaming URL
+      const { stream_url, video_metadata } = await videoService.getStreamingUrl(id);
+
+      // Optionally fetch additional video details if you have an endpoint
+      // const videoDetails = await videoService.getVideoDetails(id);
+
+      // Construct video object from API response
+      const videoData: VideoData = {
+        id: id,
+        title: video_metadata?.title || 'Untitled Video',
+        description: video_metadata?.description,
+        streamUrl: stream_url,
+        thumbnailUrl: video_metadata?.thumbnail_url,
+        duration: video_metadata?.duration,
+        views: video_metadata?.views || 0,
+        likes: video_metadata?.likes || 0,
+        shares: video_metadata?.shares || 0,
+        rating: video_metadata?.rating,
+        uploadDate: video_metadata?.upload_date || video_metadata?.created_at,
+        uploader: video_metadata?.uploader ? {
+          id: video_metadata.uploader.id,
+          name: video_metadata.uploader.name,
+          avatar: video_metadata.uploader.avatar_url,
+          subscribers: video_metadata.uploader.subscribers,
+        } : undefined,
+        timelineMarkers: video_metadata?.timeline_markers || [],
+        tags: video_metadata?.tags || [],
+        metadata: video_metadata,
+      };
+
+      setVideo(videoData);
+      
+      // Track video view
+      await trackVideoView(id);
+
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to load video. Please try again.';
+      setError(errorMsg);
+      
+      Sentry.captureException(err, {
+        tags: { screen: 'video_detail', action: 'load_video' },
+        extra: { videoId: id, errorMessage: errorMsg }
+      });
+      
+      console.error('Video load error:', err);
+      
+      Alert.alert(
+        'Failed to Load Video',
+        errorMsg,
+        [
+          { text: 'Go Back', onPress: () => router.back() },
+          { text: 'Retry', onPress: loadVideoData }
+        ]
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const handleShare = () => {
-    Alert.alert('Share', 'Share functionality will be implemented with backend integration');
+  const trackVideoView = async (videoId: string) => {
+    try {
+      // If you have an analytics endpoint
+      // await videoService.trackView(videoId);
+      console.log('Video view tracked:', videoId);
+    } catch (err) {
+      // Silently fail - don't interrupt user experience
+      console.error('Failed to track view:', err);
+    }
   };
 
-  const handleDelete = () => {
-    Alert.alert(
-      'Delete Video',
-      'Are you sure you want to delete this video? This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            // TODO: Implement delete with backend API
-            Alert.alert('Success', 'Video deleted');
-            router.back();
-          },
-        },
-      ]
-    );
+  const handleLike = async () => {
+    try {
+      const newLikedState = !liked;
+      setLiked(newLikedState);
+      
+      likeScale.value = withSequence(
+        withSpring(1.3, Animation.spring.bouncy),
+        withSpring(1, Animation.spring.smooth)
+      );
+
+      // If you have a like endpoint
+      // if (newLikedState) {
+      //   await videoService.likeVideo(id);
+      //   setVideo(prev => prev ? { ...prev, likes: (prev.likes || 0) + 1 } : null);
+      // } else {
+      //   await videoService.unlikeVideo(id);
+      //   setVideo(prev => prev ? { ...prev, likes: Math.max((prev.likes || 0) - 1, 0) } : null);
+      // }
+
+    } catch (err) {
+      setLiked(!liked); // Revert on error
+      console.error('Failed to like video:', err);
+      Alert.alert('Error', 'Failed to update like status');
+    }
   };
 
-  const handleTagPress = (timeMillis: number) => {
-    // TODO: Implement seek to timestamp when VideoPlayer supports it
-    console.log('Seek to:', timeMillis);
+  const handleBookmark = async () => {
+    try {
+      const newBookmarkedState = !bookmarked;
+      setBookmarked(newBookmarkedState);
+      
+      bookmarkScale.value = withSequence(
+        withSpring(1.3, Animation.spring.bouncy),
+        withSpring(1, Animation.spring.smooth)
+      );
+
+      // If you have a bookmark endpoint
+      // if (newBookmarkedState) {
+      //   await videoService.bookmarkVideo(id);
+      // } else {
+      //   await videoService.unbookmarkVideo(id);
+      // }
+
+    } catch (err) {
+      setBookmarked(!bookmarked); // Revert on error
+      console.error('Failed to bookmark video:', err);
+      Alert.alert('Error', 'Failed to update bookmark status');
+    }
   };
 
-  const handleRelatedVideoPress = (videoId: string) => {
-    router.push(`/video/${videoId}`);
+  const handleShare = async () => {
+    try {
+      // Implement share functionality
+      // You can use expo-sharing or react-native-share
+      Alert.alert('Share', 'Share functionality coming soon!');
+    } catch (err) {
+      console.error('Failed to share video:', err);
+    }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
+  const handleSubscribe = async () => {
+    try {
+      if (!video?.uploader) return;
+      
+      // If you have a subscribe endpoint
+      // await videoService.subscribeToUser(video.uploader.id);
+      Alert.alert('Subscribed!', `You're now subscribed to ${video.uploader.name}`);
+      
+    } catch (err) {
+      console.error('Failed to subscribe:', err);
+      Alert.alert('Error', 'Failed to subscribe');
+    }
   };
 
-  const formatDuration = (duration: string) => {
-    return duration;
+  const formatViews = (views: number): string => {
+    if (views >= 1000000) {
+      return `${(views / 1000000).toFixed(1)}M`;
+    } else if (views >= 1000) {
+      return `${(views / 1000).toFixed(1)}K`;
+    }
+    return views.toString();
   };
 
+  const formatDate = (dateString?: string): string => {
+    if (!dateString) return 'Recently';
+    
+    try {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffInMs = now.getTime() - date.getTime();
+      const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+      
+      if (diffInDays === 0) return 'Today';
+      if (diffInDays === 1) return 'Yesterday';
+      if (diffInDays < 7) return `${diffInDays} days ago`;
+      if (diffInDays < 30) return `${Math.floor(diffInDays / 7)} weeks ago`;
+      if (diffInDays < 365) return `${Math.floor(diffInDays / 30)} months ago`;
+      return `${Math.floor(diffInDays / 365)} years ago`;
+    } catch {
+      return 'Recently';
+    }
+  };
+
+  const likeAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: likeScale.value }],
+  }));
+
+  const bookmarkAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: bookmarkScale.value }],
+  }));
+
+  // Loading State
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <LoadingSpinner message="Loading video..." fullScreen />
-      </SafeAreaView>
+      <View style={[styles.loadingContainer, { backgroundColor: currentColors.background }]}>
+        <Animated.View entering={FadeIn.duration(300)}>
+          <LinearGradient
+            colors={Gradients.primary.colors}
+            start={Gradients.primary.start}
+            end={Gradients.primary.end}
+            style={styles.loadingGradient}
+          >
+            <IconSymbol 
+              name="arrow.clockwise" 
+              size={32} 
+              color={Colors.textOnPrimary}
+            />
+            <Text style={styles.loadingText}>Loading video...</Text>
+          </LinearGradient>
+        </Animated.View>
+      </View>
     );
   }
 
-  if (!video) {
+  // Error State
+  if (error || !video) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <IconSymbol size={64} name="exclamationmark.triangle" color={Colors.error} />
-          <Text style={styles.errorText}>Video not found</Text>
-          <Button title="Go Back" onPress={() => router.back()} variant="primary" />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // Mock related videos (in production, this would come from the API)
-  const relatedVideos = [
-    { id: '2', title: video.teamA + ' Highlights', thumbnail: video.thumbnail },
-    { id: '3', title: 'Recent Game Analysis', thumbnail: video.thumbnail },
-  ].filter((v) => v.id !== video.id);
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Header with Back Button */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <IconSymbol size={24} name="chevron.left" color={Colors.text} />
-            <Text style={styles.backText}>Back</Text>
-          </TouchableOpacity>
-
-          <View style={styles.headerActions}>
-            <TouchableOpacity onPress={handleShare} style={styles.iconButton}>
-              <IconSymbol size={24} name="square.and.arrow.up" color={Colors.text} />
+      <View style={[styles.loadingContainer, { backgroundColor: currentColors.background }]}>
+        <Animated.View entering={FadeIn.duration(300)} style={styles.errorContainer}>
+          <IconSymbol 
+            name="exclamationmark.triangle.fill" 
+            size={48} 
+            color={currentColors.error}
+          />
+          <Text style={[styles.errorTitle, { color: currentColors.text }]}>
+            Failed to Load Video
+          </Text>
+          <Text style={[styles.errorMessage, { color: currentColors.textSecondary }]}>
+            {error || 'Video not found'}
+          </Text>
+          <View style={styles.errorButtons}>
+            <TouchableOpacity onPress={() => router.back()}>
+              <View style={[styles.errorButton, { backgroundColor: currentColors.surface }]}>
+                <Text style={[styles.errorButtonText, { color: currentColors.text }]}>
+                  Go Back
+                </Text>
+              </View>
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleDelete} style={styles.iconButton}>
-              <IconSymbol size={24} name="trash" color={Colors.error} />
+            <TouchableOpacity onPress={loadVideoData}>
+              <LinearGradient
+                colors={Gradients.primary.colors}
+                style={styles.errorButton}
+              >
+                <Text style={[styles.errorButtonText, { color: Colors.textOnPrimary }]}>
+                  Retry
+                </Text>
+              </LinearGradient>
             </TouchableOpacity>
           </View>
-        </View>
+        </Animated.View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.container, { backgroundColor: currentColors.background }]}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Back Button */}
+        <Animated.View 
+          style={styles.backButton}
+          entering={FadeIn.delay(100).duration(300)}
+        >
+          <BlurView intensity={20} tint={isDark ? 'dark' : 'light'} style={styles.backButtonBlur}>
+            <TouchableOpacity onPress={() => router.back()}>
+              <IconSymbol 
+                name="chevron.left" 
+                size={24} 
+                color={currentColors.text}
+              />
+            </TouchableOpacity>
+          </BlurView>
+        </Animated.View>
 
         {/* Video Player */}
-        <View style={styles.playerContainer}>
+        <Animated.View entering={FadeIn.delay(200).duration(400)}>
           <VideoPlayer
-            videoUrl={video.videoUrl}
+            videoUrl={video.streamUrl}
             title={video.title}
             timelineMarkers={video.timelineMarkers}
             tags={video.tags}
           />
-        </View>
+        </Animated.View>
 
-        {/* Video Metadata */}
-        <View style={styles.metadataSection}>
-          <Text style={styles.videoTitle}>{video.title}</Text>
+        {/* Video Info Section */}
+        <Animated.View entering={FadeInDown.delay(300).springify()}>
+          <Card variant="elevated" padding="large" style={styles.infoCard}>
+            {/* Title */}
+            <Text style={[styles.title, { color: currentColors.text }]}>
+              {video.title}
+            </Text>
 
-          <View style={styles.metadataRow}>
-            <View style={styles.metadataItem}>
-              <IconSymbol size={16} name="calendar" color={Colors.textSecondary} />
-              <Text style={styles.metadataText}>{formatDate(video.uploadedAt)}</Text>
+            {/* Stats Row */}
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <IconSymbol 
+                  name="eye.fill" 
+                  size={16} 
+                  color={currentColors.textSecondary}
+                />
+                <Text style={[styles.statText, { color: currentColors.textSecondary }]}>
+                  {formatViews(video.views || 0)} views
+                </Text>
+              </View>
+              
+              <View style={styles.statDivider} />
+              
+              <View style={styles.statItem}>
+                <IconSymbol 
+                  name="clock.fill" 
+                  size={16} 
+                  color={currentColors.textSecondary}
+                />
+                <Text style={[styles.statText, { color: currentColors.textSecondary }]}>
+                  {video.duration || '--:--'}
+                </Text>
+              </View>
+              
+              <View style={styles.statDivider} />
+              
+              <View style={styles.statItem}>
+                <IconSymbol 
+                  name="calendar" 
+                  size={16} 
+                  color={currentColors.textSecondary}
+                />
+                <Text style={[styles.statText, { color: currentColors.textSecondary }]}>
+                  {formatDate(video.uploadDate)}
+                </Text>
+              </View>
             </View>
 
-            <View style={styles.metadataItem}>
-              <IconSymbol size={16} name="clock" color={Colors.textSecondary} />
-              <Text style={styles.metadataText}>{formatDuration(video.duration)}</Text>
-            </View>
-
-            <View style={styles.metadataItem}>
-              <IconSymbol size={16} name="eye" color={Colors.textSecondary} />
-              <Text style={styles.metadataText}>{video.views} views</Text>
-            </View>
-          </View>
-
-          {/* Teams */}
-          <View style={styles.teamsContainer}>
-            <View style={styles.teamBadge}>
-              <Text style={styles.teamText}>{video.teamA}</Text>
-            </View>
-            <Text style={styles.vsText}>vs</Text>
-            <View style={styles.teamBadge}>
-              <Text style={styles.teamText}>{video.teamB}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Timeline Markers / Tags */}
-        {video.tags && video.tags.length > 0 && (
-          <Card variant="elevated" style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <IconSymbol size={20} name="tag.fill" color={Colors.primary} />
-              <Text style={styles.sectionTitle}>Key Moments</Text>
-            </View>
-
-            <View style={styles.tagsList}>
-              {video.tags.map((tag: any) => (
-                <TouchableOpacity
-                  key={tag.id}
-                  style={styles.tagItem}
-                  onPress={() => handleTagPress(tag.timeMillis)}
+            {/* Action Buttons */}
+            <View style={styles.actionRow}>
+              <AnimatedPressable 
+                onPress={handleLike}
+                style={[likeAnimatedStyle]}
+              >
+                <LinearGradient
+                  colors={liked ? Gradients.primary.colors : [currentColors.surface, currentColors.surface]}
+                  style={[styles.actionButton, liked && Shadows.primaryGlow]}
                 >
-                  <View style={styles.tagIcon}>
-                    <IconSymbol size={20} name="play.circle.fill" color={Colors.primary} />
-                  </View>
-                  <View style={styles.tagContent}>
-                    <Text style={styles.tagTime}>
-                      {Math.floor(tag.timeMillis / 60000)}:
-                      {String(Math.floor((tag.timeMillis % 60000) / 1000)).padStart(2, '0')}
-                    </Text>
-                    <Text style={styles.tagTitle}>{tag.playType}</Text>
-                    <Text style={styles.tagPlayer}>{tag.playerName}</Text>
-                  </View>
-                  <IconSymbol size={16} name="chevron.right" color={Colors.textSecondary} />
-                </TouchableOpacity>
-              ))}
-            </View>
-          </Card>
-        )}
-
-        {/* Related Videos */}
-        {relatedVideos.length > 0 && (
-          <Card variant="elevated" style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <IconSymbol size={20} name="video.fill" color={Colors.primary} />
-              <Text style={styles.sectionTitle}>Related Videos</Text>
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.relatedScroll}
-            >
-              {relatedVideos.map((relatedVideo: any) => (
-                <TouchableOpacity
-                  key={relatedVideo.id}
-                  style={styles.relatedVideoCard}
-                  onPress={() => handleRelatedVideoPress(relatedVideo.id)}
-                >
-                  <Image
-                    source={{ uri: relatedVideo.thumbnail }}
-                    style={styles.relatedThumbnail}
+                  <IconSymbol 
+                    name="heart.fill" 
+                    size={20} 
+                    color={liked ? Colors.textOnPrimary : currentColors.textSecondary}
                   />
-                  <Text style={styles.relatedTitle} numberOfLines={2}>
-                    {relatedVideo.title}
+                  <Text style={[
+                    styles.actionButtonText, 
+                    { color: liked ? Colors.textOnPrimary : currentColors.textSecondary }
+                  ]}>
+                    {liked ? 'Liked' : 'Like'}
                   </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+                </LinearGradient>
+              </AnimatedPressable>
+
+              <AnimatedPressable 
+                onPress={handleBookmark}
+                style={[bookmarkAnimatedStyle]}
+              >
+                <View style={[
+                  styles.actionButton,
+                  { backgroundColor: currentColors.surface },
+                  bookmarked && { borderWidth: 2, borderColor: currentColors.primary }
+                ]}>
+                  <IconSymbol 
+                    name="bookmark.fill" 
+                    size={20} 
+                    color={bookmarked ? currentColors.primary : currentColors.textSecondary}
+                  />
+                  <Text style={[
+                    styles.actionButtonText,
+                    { color: bookmarked ? currentColors.primary : currentColors.textSecondary }
+                  ]}>
+                    {bookmarked ? 'Saved' : 'Save'}
+                  </Text>
+                </View>
+              </AnimatedPressable>
+
+              <TouchableOpacity onPress={handleShare}>
+                <View style={[styles.actionButton, { backgroundColor: currentColors.surface }]}>
+                  <IconSymbol 
+                    name="square.and.arrow.up" 
+                    size={20} 
+                    color={currentColors.textSecondary}
+                  />
+                  <Text style={[styles.actionButtonText, { color: currentColors.textSecondary }]}>
+                    Share
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
           </Card>
+        </Animated.View>
+
+        {/* Uploader Info */}
+        {video.uploader && (
+          <Animated.View entering={SlideInRight.delay(400).springify()}>
+            <Card variant="elevated" padding="medium" style={styles.uploaderCard}>
+              <View style={styles.uploaderRow}>
+                <PlayerAvatar 
+                  name={video.uploader.name}
+                  imageUri={video.uploader.avatar}
+                  size="medium"
+                  variant="gradient"
+                />
+                
+                <View style={styles.uploaderInfo}>
+                  <Text style={[styles.uploaderName, { color: currentColors.text }]}>
+                    {video.uploader.name}
+                  </Text>
+                  <Text style={[styles.uploaderSubs, { color: currentColors.textSecondary }]}>
+                    {video.uploader.subscribers 
+                      ? `${formatViews(video.uploader.subscribers)} subscribers`
+                      : 'No subscribers yet'
+                    }
+                  </Text>
+                </View>
+
+                <TouchableOpacity onPress={handleSubscribe}>
+                  <LinearGradient
+                    colors={Gradients.primary.colors}
+                    style={styles.subscribeButton}
+                  >
+                    <Text style={styles.subscribeText}>Subscribe</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </Card>
+          </Animated.View>
         )}
 
-        <View style={styles.bottomSpacing} />
+        {/* Description */}
+        {video.description && (
+          <Animated.View entering={FadeInDown.delay(500).springify()}>
+            <Card variant="outlined" padding="large" style={styles.descriptionCard}>
+              <View style={styles.descriptionHeader}>
+                <IconSymbol 
+                  name="doc.text" 
+                  size={20} 
+                  color={currentColors.primary}
+                />
+                <Text style={[styles.descriptionTitle, { color: currentColors.text }]}>
+                  Description
+                </Text>
+              </View>
+              <Text style={[styles.descriptionText, { color: currentColors.textSecondary }]}>
+                {video.description}
+              </Text>
+            </Card>
+          </Animated.View>
+        )}
+
+        {/* Video Stats Card */}
+        <Animated.View entering={FadeInDown.delay(600).springify()}>
+          <Card variant="gradient" padding="large" style={styles.statsCard}>
+            <Text style={styles.statsCardTitle}>Video Performance</Text>
+            
+            <View style={styles.performanceGrid}>
+              <View style={styles.performanceItem}>
+                <IconSymbol 
+                  name="heart.fill" 
+                  size={24} 
+                  color={Colors.textOnPrimary}
+                />
+                <Text style={styles.performanceValue}>
+                  {formatViews(video.likes || 0)}
+                </Text>
+                <Text style={styles.performanceLabel}>Likes</Text>
+              </View>
+
+              <View style={styles.performanceDivider} />
+
+              <View style={styles.performanceItem}>
+                <IconSymbol 
+                  name="star.fill" 
+                  size={24} 
+                  color={Colors.textOnPrimary}
+                />
+                <Text style={styles.performanceValue}>
+                  {video.rating?.toFixed(1) || 'N/A'}
+                </Text>
+                <Text style={styles.performanceLabel}>Rating</Text>
+              </View>
+
+              <View style={styles.performanceDivider} />
+
+              <View style={styles.performanceItem}>
+                <IconSymbol 
+                  name="square.and.arrow.up" 
+                  size={24} 
+                  color={Colors.textOnPrimary}
+                />
+                <Text style={styles.performanceValue}>
+                  {formatViews(video.shares || 0)}
+                </Text>
+                <Text style={styles.performanceLabel}>Shares</Text>
+              </View>
+            </View>
+          </Card>
+        </Animated.View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
+  );
+}
+
+export default function VideoDetailScreen() {
+  return (
+    <ComponentErrorBoundary componentName="VideoDetailScreen">
+      <VideoDetailScreenContent />
+    </ComponentErrorBoundary>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
-
-  scrollView: {
-    flex: 1,
+  scrollContent: {
+    paddingBottom: Spacing.xxxl,
   },
-
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-  },
-
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  backText: {
-    fontSize: Typography.body,
-    color: Colors.text,
-    marginLeft: Spacing.xs,
-    fontWeight: '500',
-  },
-
-  headerActions: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-  },
-
-  iconButton: {
-    padding: Spacing.xs,
-  },
-
-  playerContainer: {
-    width: '100%',
-    aspectRatio: 16 / 9,
-    backgroundColor: Colors.surface,
-  },
-
-  metadataSection: {
-    padding: Spacing.md,
-  },
-
-  videoTitle: {
-    fontSize: Typography.title3,
-    fontWeight: '700',
-    color: Colors.text,
-    marginBottom: Spacing.md,
-  },
-
-  metadataRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.md,
-    marginBottom: Spacing.md,
-  },
-
-  metadataItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-
-  metadataText: {
-    fontSize: Typography.footnote,
-    color: Colors.textSecondary,
-  },
-
-  teamsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.md,
-    marginTop: Spacing.sm,
-  },
-
-  teamBadge: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.md,
-  },
-
-  teamText: {
-    fontSize: Typography.callout,
-    fontWeight: '600',
-    color: Colors.textOnPrimary,
-  },
-
-  vsText: {
-    fontSize: Typography.body,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-  },
-
-  section: {
-    marginHorizontal: Spacing.md,
-    marginBottom: Spacing.md,
-  },
-
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
-  },
-
-  sectionTitle: {
-    fontSize: Typography.headline,
-    fontWeight: '600',
-    color: Colors.text,
-  },
-
-  tagsList: {
-    gap: Spacing.sm,
-  },
-
-  tagItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Spacing.sm,
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-
-  tagIcon: {
-    marginRight: Spacing.sm,
-  },
-
-  tagContent: {
-    flex: 1,
-  },
-
-  tagTime: {
-    fontSize: Typography.footnote,
-    fontWeight: '600',
-    color: Colors.primary,
-    marginBottom: 2,
-  },
-
-  tagTitle: {
-    fontSize: Typography.body,
-    fontWeight: '500',
-    color: Colors.text,
-    marginBottom: 2,
-  },
-
-  tagPlayer: {
-    fontSize: Typography.footnote,
-    color: Colors.textSecondary,
-  },
-
-  relatedScroll: {
-    marginHorizontal: -Spacing.md,
-    paddingHorizontal: Spacing.md,
-  },
-
-  relatedVideoCard: {
-    width: 160,
-    marginRight: Spacing.md,
-  },
-
-  relatedThumbnail: {
-    width: '100%',
-    aspectRatio: 16 / 9,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.surface,
-    marginBottom: Spacing.sm,
-  },
-
-  relatedTitle: {
-    fontSize: Typography.footnote,
-    color: Colors.text,
-    lineHeight: Typography.lineHeights.normal * Typography.footnote,
-  },
-
-  errorContainer: {
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: Spacing.xl,
-    gap: Spacing.md,
   },
-
-  errorText: {
-    fontSize: Typography.title3,
+  loadingGradient: {
+    paddingVertical: Spacing.xl,
+    paddingHorizontal: Spacing.xxl,
+    borderRadius: BorderRadius.xl,
+    alignItems: 'center',
+    gap: Spacing.md,
+    ...Shadows.large,
+  },
+  loadingText: {
+    color: Colors.textOnPrimary,
+    fontSize: Typography.body,
     fontWeight: '600',
-    color: Colors.text,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    gap: Spacing.md,
+    padding: Spacing.xl,
+  },
+  errorTitle: {
+    fontSize: Typography.title2,
+    fontWeight: '700',
     textAlign: 'center',
   },
-
-  bottomSpacing: {
-    height: Spacing.xl * 2,
+  errorMessage: {
+    fontSize: Typography.body,
+    textAlign: 'center',
+    marginBottom: Spacing.md,
+  },
+  errorButtons: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  errorButton: {
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: BorderRadius.lg,
+    minWidth: 120,
+    alignItems: 'center',
+  },
+  errorButtonText: {
+    fontSize: Typography.body,
+    fontWeight: '600',
+  },
+  backButton: {
+    position: 'absolute',
+    top: Spacing.xl + 10,
+    left: Spacing.lg,
+    zIndex: 100,
+    borderRadius: BorderRadius.full,
+    overflow: 'hidden',
+    ...Shadows.medium,
+  },
+  backButtonBlur: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoCard: {
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.lg,
+  },
+  title: {
+    fontSize: Typography.title3,
+    fontWeight: '700',
+    marginBottom: Spacing.md,
+    lineHeight: Typography.title3 * 1.3,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  statText: {
+    fontSize: Typography.footnote,
+    fontWeight: '500',
+  },
+  statDivider: {
+    width: 1,
+    height: 12,
+    backgroundColor: Colors.border,
+    marginHorizontal: Spacing.sm,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.full,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  actionButtonText: {
+    fontSize: Typography.callout,
+    fontWeight: '600',
+  },
+  uploaderCard: {
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.lg,
+  },
+  uploaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  uploaderInfo: {
+    flex: 1,
+  },
+  uploaderName: {
+    fontSize: Typography.body,
+    fontWeight: '600',
+    marginBottom: Spacing.xs / 2,
+  },
+  uploaderSubs: {
+    fontSize: Typography.footnote,
+  },
+  subscribeButton: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.full,
+    ...Shadows.small,
+  },
+  subscribeText: {
+    color: Colors.textOnPrimary,
+    fontSize: Typography.callout,
+    fontWeight: '700',
+  },
+  descriptionCard: {
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.lg,
+  },
+  descriptionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  descriptionTitle: {
+    fontSize: Typography.headline,
+    fontWeight: '700',
+  },
+  descriptionText: {
+    fontSize: Typography.callout,
+    lineHeight: Typography.callout * 1.5,
+  },
+  statsCard: {
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.lg,
+  },
+  statsCardTitle: {
+    fontSize: Typography.headline,
+    fontWeight: '700',
+    color: Colors.textOnPrimary,
+    marginBottom: Spacing.lg,
+  },
+  performanceGrid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  performanceItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  performanceValue: {
+    fontSize: Typography.title3,
+    fontWeight: '700',
+    color: Colors.textOnPrimary,
+  },
+  performanceLabel: {
+    fontSize: Typography.footnote,
+    color: Colors.textOnPrimary,
+    opacity: 0.8,
+  },
+  performanceDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
 });
+
+// import React, { useEffect, useState } from 'react';
+// import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable } from 'react-native';
+// import { useLocalSearchParams, useRouter } from 'expo-router';
+// import Animated, {
+//   FadeIn,
+//   FadeInDown,
+//   SlideInRight,
+//   useAnimatedStyle,
+//   useSharedValue,
+//   withSpring,
+//   withSequence,
+//   withTiming,
+// } from 'react-native-reanimated';
+// import { LinearGradient } from 'expo-linear-gradient';
+// import { BlurView } from 'expo-blur';
+// import VideoPlayer from '@/components/ui/videoPlayer';
+// import Card from '@/components/ui/card';
+// import PlayerAvatar from '@/components/ui/playerAvatar';
+// import { fetchVideoById } from '@/services/videoService';
+// import { Colors, DarkColors, Typography, Spacing, BorderRadius, Shadows, Gradients, Animation } from '@/constants/theme';
+// import { IconSymbol } from '@/components/ui/icon-symbol';
+// import { useColorScheme } from '@/hooks/use-color-scheme';
+
+// const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+// export default function VideoDetailScreen() {
+//   const theme = useColorScheme() ?? 'light';
+//   const isDark = theme === 'dark';
+//   const currentColors = isDark ? DarkColors : Colors;
+//   const router = useRouter();
+
+//   const { id } = useLocalSearchParams();
+//   const [video, setVideo] = useState<any>(null);
+//   const [liked, setLiked] = useState(false);
+//   const [bookmarked, setBookmarked] = useState(false);
+
+//   const likeScale = useSharedValue(1);
+//   const bookmarkScale = useSharedValue(1);
+
+//   useEffect(() => {
+//     (async () => {
+//       const data = await fetchVideoById(id as string);
+//       setVideo(data);
+//     })();
+//   }, [id]);
+
+//   const handleLike = () => {
+//     setLiked(!liked);
+//     likeScale.value = withSequence(
+//       withSpring(1.3, Animation.spring.bouncy),
+//       withSpring(1, Animation.spring.smooth)
+//     );
+//   };
+
+//   const handleBookmark = () => {
+//     setBookmarked(!bookmarked);
+//     bookmarkScale.value = withSequence(
+//       withSpring(1.3, Animation.spring.bouncy),
+//       withSpring(1, Animation.spring.smooth)
+//     );
+//   };
+
+//   const likeAnimatedStyle = useAnimatedStyle(() => ({
+//     transform: [{ scale: likeScale.value }],
+//   }));
+
+//   const bookmarkAnimatedStyle = useAnimatedStyle(() => ({
+//     transform: [{ scale: bookmarkScale.value }],
+//   }));
+
+//   if (!video) {
+//     return (
+//       <View style={[styles.loadingContainer, { backgroundColor: currentColors.background }]}>
+//         <Animated.View entering={FadeIn.duration(300)}>
+//           <LinearGradient
+//             colors={Gradients.primary.colors}
+//             start={Gradients.primary.start}
+//             end={Gradients.primary.end}
+//             style={styles.loadingGradient}
+//           >
+//             <IconSymbol 
+//               name="arrow.clockwise" 
+//               size={32} 
+//               color={'dark'}
+//               animated
+//               animationType="rotate"
+//             />
+//             <Text style={styles.loadingText}>Loading video...</Text>
+//           </LinearGradient>
+//         </Animated.View>
+//       </View>
+//     );
+//   }
+
+//   return (
+//     <View style={[styles.container, { backgroundColor: currentColors.background }]}>
+//       <ScrollView 
+//         showsVerticalScrollIndicator={false}
+//         contentContainerStyle={styles.scrollContent}
+//       >
+//         {/* Back Button */}
+//         <Animated.View 
+//           style={styles.backButton}
+//           entering={FadeIn.delay(100).duration(300)}
+//         >
+//           <BlurView intensity={20} tint={isDark ? 'dark' : 'light'} style={styles.backButtonBlur}>
+//             <TouchableOpacity onPress={() => router.back()}>
+//               <IconSymbol 
+//                 name="chevron.left" 
+//                 size={24} 
+//                 color={currentColors.text}
+//               />
+//             </TouchableOpacity>
+//           </BlurView>
+//         </Animated.View>
+
+//         {/* Video Player */}
+//         <Animated.View entering={FadeIn.delay(200).duration(400)}>
+//           <VideoPlayer
+//             videoUrl={video.videoUrl}
+//             title={video.title}
+//             timelineMarkers={video.timelineMarkers}
+//             tags={video.tags}
+//           />
+//         </Animated.View>
+
+//         {/* Video Info Section */}
+//         <Animated.View entering={FadeInDown.delay(300).springify()}>
+//           <Card variant="elevated" padding="large" style={styles.infoCard}>
+//             {/* Title */}
+//             <Text style={[styles.title, { color: currentColors.text }]}>
+//               {video.title}
+//             </Text>
+
+//             {/* Stats Row */}
+//             <View style={styles.statsRow}>
+//               <View style={styles.statItem}>
+//                 <IconSymbol 
+//                   name="eye.fill" 
+//                   size={16} 
+//                   color={currentColors.textSecondary}
+//                 />
+//                 <Text style={[styles.statText, { color: currentColors.textSecondary }]}>
+//                   {video.views || '1.2K'} views
+//                 </Text>
+//               </View>
+              
+//               <View style={styles.statDivider} />
+              
+//               <View style={styles.statItem}>
+//                 <IconSymbol 
+//                   name="clock.fill" 
+//                   size={16} 
+//                   color={currentColors.textSecondary}
+//                 />
+//                 <Text style={[styles.statText, { color: currentColors.textSecondary }]}>
+//                   {video.duration || '5:24'}
+//                 </Text>
+//               </View>
+              
+//               <View style={styles.statDivider} />
+              
+//               <View style={styles.statItem}>
+//                 <IconSymbol 
+//                   name="calendar" 
+//                   size={16} 
+//                   color={currentColors.textSecondary}
+//                 />
+//                 <Text style={[styles.statText, { color: currentColors.textSecondary }]}>
+//                   {video.uploadDate || '2 days ago'}
+//                 </Text>
+//               </View>
+//             </View>
+
+//             {/* Action Buttons */}
+//             <View style={styles.actionRow}>
+//               <AnimatedPressable 
+//                 onPress={handleLike}
+//                 style={[likeAnimatedStyle]}
+//               >
+//                 <LinearGradient
+//                   colors={liked ? Gradients.primary.colors : [currentColors.surface, currentColors.surface]}
+//                   style={[styles.actionButton, liked && Shadows.primaryGlow]}
+//                 >
+//                   <IconSymbol 
+//                     name="heart.fill" 
+//                     size={20} 
+//                     color={liked ? 'dark' : currentColors.textSecondary}
+//                   />
+//                   <Text style={[
+//                     styles.actionButtonText, 
+//                     { color: liked ? 'dark' : currentColors.textSecondary }
+//                   ]}>
+//                     {liked ? 'Liked' : 'Like'}
+//                   </Text>
+//                 </LinearGradient>
+//               </AnimatedPressable>
+
+//               <AnimatedPressable 
+//                 onPress={handleBookmark}
+//                 style={[bookmarkAnimatedStyle]}
+//               >
+//                 <View style={[
+//                   styles.actionButton,
+//                   { backgroundColor: currentColors.surface },
+//                   bookmarked && { borderWidth: 2, borderColor: currentColors.primary }
+//                 ]}>
+//                   <IconSymbol 
+//                     name="bookmark.fill" 
+//                     size={20} 
+//                     color={bookmarked ? currentColors.primary : currentColors.textSecondary}
+//                   />
+//                   <Text style={[
+//                     styles.actionButtonText,
+//                     { color: bookmarked ? currentColors.primary : currentColors.textSecondary }
+//                   ]}>
+//                     {bookmarked ? 'Saved' : 'Save'}
+//                   </Text>
+//                 </View>
+//               </AnimatedPressable>
+
+//               <TouchableOpacity>
+//                 <View style={[styles.actionButton, { backgroundColor: currentColors.surface }]}>
+//                   <IconSymbol 
+//                     name="square.and.arrow.up" 
+//                     size={20} 
+//                     color={currentColors.textSecondary}
+//                   />
+//                   <Text style={[styles.actionButtonText, { color: currentColors.textSecondary }]}>
+//                     Share
+//                   </Text>
+//                 </View>
+//               </TouchableOpacity>
+//             </View>
+//           </Card>
+//         </Animated.View>
+
+//         {/* Uploader Info */}
+//         {video.uploader && (
+//           <Animated.View entering={SlideInRight.delay(400).springify()}>
+//             <Card variant="elevated" padding="medium" style={styles.uploaderCard}>
+//               <View style={styles.uploaderRow}>
+//                 <PlayerAvatar 
+//                   name={video.uploader.name}
+//                   imageUri={video.uploader.avatar}
+//                   size="medium"
+//                   variant="gradient"
+//                 />
+                
+//                 <View style={styles.uploaderInfo}>
+//                   <Text style={[styles.uploaderName, { color: currentColors.text }]}>
+//                     {video.uploader.name}
+//                   </Text>
+//                   <Text style={[styles.uploaderSubs, { color: currentColors.textSecondary }]}>
+//                     {video.uploader.subscribers || '1.5K'} subscribers
+//                   </Text>
+//                 </View>
+
+//                 <TouchableOpacity>
+//                   <LinearGradient
+//                     colors={Gradients.primary.colors}
+//                     style={styles.subscribeButton}
+//                   >
+//                     <Text style={styles.subscribeText}>Subscribe</Text>
+//                   </LinearGradient>
+//                 </TouchableOpacity>
+//               </View>
+//             </Card>
+//           </Animated.View>
+//         )}
+
+//         {/* Description */}
+//         {video.description && (
+//           <Animated.View entering={FadeInDown.delay(500).springify()}>
+//             <Card variant="outlined" padding="large" style={styles.descriptionCard}>
+//               <View style={styles.descriptionHeader}>
+//                 <IconSymbol 
+//                   name="doc.on.doc" 
+//                   size={20} 
+//                   color={currentColors.primary}
+//                 />
+//                 <Text style={[styles.descriptionTitle, { color: currentColors.text }]}>
+//                   Description
+//                 </Text>
+//               </View>
+//               <Text style={[styles.descriptionText, { color: currentColors.textSecondary }]}>
+//                 {video.description}
+//               </Text>
+//             </Card>
+//           </Animated.View>
+//         )}
+
+//         {/* Video Stats Card */}
+//         <Animated.View entering={FadeInDown.delay(600).springify()}>
+//           <Card variant="gradient" padding="large" style={styles.statsCard}>
+//             <Text style={styles.statsCardTitle}>Video Performance</Text>
+            
+//             <View style={styles.performanceGrid}>
+//               <View style={styles.performanceItem}>
+//                 <IconSymbol 
+//                   name="heart.fill" 
+//                   size={24} 
+//                   color={'dark'}
+//                 />
+//                 <Text style={styles.performanceValue}>{video.likes || '342'}</Text>
+//                 <Text style={styles.performanceLabel}>Likes</Text>
+//               </View>
+
+//               <View style={styles.performanceDivider} />
+
+//               <View style={styles.performanceItem}>
+//                 <IconSymbol 
+//                   name="star.fill" 
+//                   size={24} 
+//                   color={'dark'}
+//                 />
+//                 <Text style={styles.performanceValue}>{video.rating || '4.8'}</Text>
+//                 <Text style={styles.performanceLabel}>Rating</Text>
+//               </View>
+
+//               <View style={styles.performanceDivider} />
+
+//               <View style={styles.performanceItem}>
+//                 <IconSymbol 
+//                   name="square.and.arrow.up" 
+//                   size={24} 
+//                   color={'dark'}
+//                 />
+//                 <Text style={styles.performanceValue}>{video.shares || '89'}</Text>
+//                 <Text style={styles.performanceLabel}>Shares</Text>
+//               </View>
+//             </View>
+//           </Card>
+//         </Animated.View>
+//       </ScrollView>
+//     </View>
+//   );
+// }
+
+// const styles = StyleSheet.create({
+//   container: {
+//     flex: 1,
+//   },
+
+//   scrollContent: {
+//     paddingBottom: Spacing.xxxl,
+//   },
+
+//   loadingContainer: {
+//     flex: 1,
+//     justifyContent: 'center',
+//     alignItems: 'center',
+//   },
+
+//   loadingGradient: {
+//     paddingVertical: Spacing.xl,
+//     paddingHorizontal: Spacing.xxl,
+//     borderRadius: BorderRadius.xl,
+//     alignItems: 'center',
+//     gap: Spacing.md,
+//     ...Shadows.large,
+//   },
+
+//   loadingText: {
+//     color: 'dark',
+//     fontSize: Typography.body,
+//     fontWeight: '600',
+//   },
+
+//   // Back Button
+//   backButton: {
+//     position: 'absolute',
+//     top: Spacing.xl + 10,
+//     left: Spacing.lg,
+//     zIndex: 100,
+//     borderRadius: BorderRadius.full,
+//     overflow: 'hidden',
+//     ...Shadows.medium,
+//   },
+
+//   backButtonBlur: {
+//     width: 40,
+//     height: 40,
+//     alignItems: 'center',
+//     justifyContent: 'center',
+//   },
+
+//   // Info Card
+//   infoCard: {
+//     marginHorizontal: Spacing.lg,
+//     marginTop: Spacing.lg,
+//   },
+
+//   title: {
+//     fontSize: Typography.title3,
+//     fontWeight: '700',
+//     marginBottom: Spacing.md,
+//     lineHeight: Typography.title3 * 1.3,
+//   },
+
+//   statsRow: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     marginBottom: Spacing.lg,
+//   },
+
+//   statItem: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     gap: Spacing.xs,
+//   },
+
+//   statText: {
+//     fontSize: Typography.footnote,
+//     fontWeight: '500',
+//   },
+
+//   statDivider: {
+//     width: 1,
+//     height: 12,
+//     backgroundColor: Colors.border,
+//     marginHorizontal: Spacing.sm,
+//   },
+
+//   actionRow: {
+//     flexDirection: 'row',
+//     gap: Spacing.sm,
+//   },
+
+//   actionButton: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     gap: Spacing.xs,
+//     paddingVertical: Spacing.sm,
+//     paddingHorizontal: Spacing.md,
+//     borderRadius: BorderRadius.full,
+//     flex: 1,
+//     justifyContent: 'center',
+//   },
+
+//   actionButtonText: {
+//     fontSize: Typography.callout,
+//     fontWeight: '600',
+//   },
+
+//   // Uploader Card
+//   uploaderCard: {
+//     marginHorizontal: Spacing.lg,
+//     marginTop: Spacing.lg,
+//   },
+
+//   uploaderRow: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     gap: Spacing.md,
+//   },
+
+//   uploaderInfo: {
+//     flex: 1,
+//   },
+
+//   uploaderName: {
+//     fontSize: Typography.body,
+//     fontWeight: '600',
+//     marginBottom: Spacing.xs / 2,
+//   },
+
+//   uploaderSubs: {
+//     fontSize: Typography.footnote,
+//   },
+
+//   subscribeButton: {
+//     paddingVertical: Spacing.sm,
+//     paddingHorizontal: Spacing.lg,
+//     borderRadius: BorderRadius.full,
+//     ...Shadows.small,
+//   },
+
+//   subscribeText: {
+//     color: 'dark',
+//     fontSize: Typography.callout,
+//     fontWeight: '700',
+//   },
+
+//   // Description Card
+//   descriptionCard: {
+//     marginHorizontal: Spacing.lg,
+//     marginTop: Spacing.lg,
+//   },
+
+//   descriptionHeader: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     gap: Spacing.sm,
+//     marginBottom: Spacing.md,
+//   },
+
+//   descriptionTitle: {
+//     fontSize: Typography.headline,
+//     fontWeight: '700',
+//   },
+
+//   descriptionText: {
+//     fontSize: Typography.callout,
+//     lineHeight: Typography.callout * 1.5,
+//   },
+
+//   // Stats Card
+//   statsCard: {
+//     marginHorizontal: Spacing.lg,
+//     marginTop: Spacing.lg,
+//   },
+
+//   statsCardTitle: {
+//     fontSize: Typography.headline,
+//     fontWeight: '700',
+//     color: 'dark',
+//     marginBottom: Spacing.lg,
+//   },
+
+//   performanceGrid: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//   },
+
+//   performanceItem: {
+//     flex: 1,
+//     alignItems: 'center',
+//     gap: Spacing.xs,
+//   },
+
+//   performanceValue: {
+//     fontSize: Typography.title3,
+//     fontWeight: '700',
+//     color: 'dark',
+//   },
+
+//   performanceLabel: {
+//     fontSize: Typography.footnote,
+//     color: 'dark',
+//     opacity: 0.8,
+//   },
+
+//   performanceDivider: {
+//     width: 1,
+//     height: 40,
+//     backgroundColor: 'rgba(255, 255, 255, 0.2)',
+//   },
+// });

@@ -1,469 +1,647 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  Image,
-  ActivityIndicator,
+import React, { useEffect, useState } from 'react';
+import { 
+  View, 
+  Text, 
+  FlatList, 
+  TouchableOpacity, 
+  Image, 
+  ActivityIndicator, 
   StyleSheet,
-  TextInput,
+  Alert
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { FadeIn, FadeInDown, FadeInUp, SlideInRight } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
 import { fetchVideos } from '@/services/videoService';
-import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
-import { Ionicons } from '@expo/vector-icons';
-import EmptyState from '@/components/ui/EmptyState';
+import { useTheme } from '@/contexts/ThemeContext';
+import { BorderRadius, Spacing, Typography, Shadows, Gradients } from '@/constants/theme';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import * as Sentry from '@sentry/react-native';
+import { ComponentErrorBoundary } from '@/components/component-error-boundary';
 
-type SortOption = 'newest' | 'oldest' | 'mostViewed' | 'mostLiked';
-type FilterOption = 'all' | 'goals' | 'assists' | 'defense';
+interface Video {
+  id: string;
+  title: string;
+  thumbnail?: string;
+  duration?: string;
+  views?: string;
+  date?: string;
+}
 
-export default function VideosScreen() {
+function VideosScreenContent() {
   const router = useRouter();
-  const [videos, setVideos] = useState<any[]>([]);
+  const { currentColors, isDark } = useTheme();
+  const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<SortOption>('newest');
-  const [filterBy, setFilterBy] = useState<FilterOption>('all');
-  const [showSortMenu, setShowSortMenu] = useState(false);
-  const [showFilterMenu, setShowFilterMenu] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    (async () => {
+  const loadVideos = async (isRefresh = false) => {
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      
+      setError(null);
+      
       const data = await fetchVideos();
-      setVideos(data);
-      setLoading(false);
-    })();
-  }, []);
-
-  // Filter and sort videos based on search, filter, and sort options
-  const filteredAndSortedVideos = useMemo(() => {
-    let result = [...videos];
-
-    // Apply search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (video) =>
-          video.title.toLowerCase().includes(query) ||
-          video.teamA?.toLowerCase().includes(query) ||
-          video.teamB?.toLowerCase().includes(query)
-      );
-    }
-
-    // Apply category filter
-    if (filterBy !== 'all') {
-      result = result.filter((video) => {
-        const playTypes = video.tags?.map((tag: any) => tag.playType.toLowerCase()) || [];
-        const markerTypes = video.timelineMarkers?.map((m: any) => m.type.toLowerCase()) || [];
-        const allTypes = [...playTypes, ...markerTypes];
-
-        switch (filterBy) {
-          case 'goals':
-            return allTypes.some((type) => type.includes('goal') || type.includes('score'));
-          case 'assists':
-            return allTypes.some((type) => type.includes('assist') || type.includes('pass'));
-          case 'defense':
-            return allTypes.some((type) => type.includes('save') || type.includes('block') || type.includes('foul'));
-          default:
-            return true;
+      setVideos(Array.isArray(data) ? data : []);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to load videos';
+      setError(errorMsg);
+      
+      Sentry.captureException(err, {
+        tags: { screen: 'videos', action: 'load_videos' },
+        extra: { 
+          isRefresh,
+          errorMessage: errorMsg 
         }
       });
+      
+      console.error('Error loading videos:', err);
+      
+      Alert.alert(
+        'Unable to Load Videos',
+        errorMsg,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Retry', onPress: () => loadVideos(isRefresh) }
+        ]
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
+  };
 
-    // Apply sorting
-    result.sort((a, b) => {
-      switch (sortBy) {
-        case 'newest':
-          return new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime();
-        case 'oldest':
-          return new Date(a.uploadedAt).getTime() - new Date(b.uploadedAt).getTime();
-        case 'mostViewed':
-          return (b.views || 0) - (a.views || 0);
-        case 'mostLiked':
-          return (b.likes || 0) - (a.likes || 0);
-        default:
-          return 0;
-      }
-    });
+  useEffect(() => {
+    loadVideos();
+  }, []);
 
-    return result;
-  }, [videos, searchQuery, sortBy, filterBy]);
+  const handleRefresh = () => {
+    loadVideos(true);
+  };
 
-  if (loading) {
+  const handleVideoPress = (videoId: string) => {
+    try {
+      router.push(`/video/${videoId}`);
+    } catch (err) {
+      Sentry.captureException(err, {
+        tags: { screen: 'videos', action: 'navigate_to_video' },
+        extra: { videoId }
+      });
+      
+      Alert.alert(
+        'Navigation Error',
+        'Unable to open video. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
+  const handleUploadPress = () => {
+    try {
+      router.push('/video/upload');
+    } catch (err) {
+      Sentry.captureException(err, {
+        tags: { screen: 'videos', action: 'navigate_to_upload' }
+      });
+      
+      Alert.alert(
+        'Navigation Error',
+        'Unable to open upload screen. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
+  const renderVideoCard = ({ item, index }: { item: Video; index: number }) => {
+    if (!item) return null;
+
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
+      <Animated.View
+        entering={SlideInRight.delay(index * 100).springify()}
+        style={styles.cardWrapper}
+      >
+        <TouchableOpacity
+          onPress={() => handleVideoPress(item.id)}
+          activeOpacity={0.9}
+        >
+          <View style={[styles.card, { backgroundColor: currentColors.cardBackground }, Shadows.large]}>
+            {/* Thumbnail Section */}
+            <View style={styles.thumbnailContainer}>
+              {item.thumbnail ? (
+                <Image 
+                  source={{ uri: item.thumbnail }} 
+                  style={styles.thumbnail}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={[styles.thumbnailPlaceholder, { backgroundColor: currentColors.surface }]}>
+                  <IconSymbol 
+                    name="play.rectangle.fill" 
+                    size={64} 
+                    color={currentColors.textLight}
+                  />
+                </View>
+              )}
+              
+              {/* Gradient overlay */}
+              <LinearGradient
+                colors={['transparent', 'rgba(0,0,0,0.7)']}
+                style={styles.thumbnailGradient}
+              />
+              
+              {/* Play button overlay */}
+              <View style={styles.playOverlay}>
+                <LinearGradient
+                  colors={Gradients.primary.colors}
+                  start={Gradients.primary.start}
+                  end={Gradients.primary.end}
+                  style={[styles.playButton, Shadows.primaryGlow]}
+                >
+                  <IconSymbol name="play.fill" size={32} color="#FFFFFF" />
+                </LinearGradient>
+              </View>
+
+              {/* Duration badge */}
+              {item.duration && (
+                <View style={styles.durationBadge}>
+                  <BlurView intensity={80} tint={isDark ? "dark" : "light"} style={styles.durationBlur}>
+                    <IconSymbol name="clock.fill" size={12} color="#FFFFFF" />
+                    <Text style={styles.durationText}>{item.duration}</Text>
+                  </BlurView>
+                </View>
+              )}
+
+              {/* Corner accent */}
+              <View style={[styles.cornerAccent, { backgroundColor: currentColors.primary }]} />
+            </View>
+
+            {/* Content Section */}
+            <View style={styles.cardContent}>
+              <View style={styles.titleRow}>
+                <View style={[styles.iconCircle, { backgroundColor: `${currentColors.primary}20` }]}>
+                  <IconSymbol name="play.circle.fill" size={20} color={currentColors.primary} />
+                </View>
+                <Text style={[styles.title, { color: currentColors.text }]} numberOfLines={2}>
+                  {item.title}
+                </Text>
+              </View>
+              
+              {/* Stats row */}
+              <View style={styles.statsRow}>
+                <View style={styles.statItem}>
+                  <IconSymbol name="eye.fill" size={14} color={currentColors.textSecondary} />
+                  <Text style={[styles.statText, { color: currentColors.textSecondary }]}>
+                    {item.views || '0'}
+                  </Text>
+                </View>
+                <View style={[styles.statDivider, { backgroundColor: currentColors.border }]} />
+                <View style={styles.statItem}>
+                  <IconSymbol name="calendar" size={14} color={currentColors.textSecondary} />
+                  <Text style={[styles.statText, { color: currentColors.textSecondary }]}>
+                    {item.date || 'Recent'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
+
+  if (loading && !refreshing) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: currentColors.background }]}>
+        <View style={styles.loadingContainer}>
+          <LinearGradient
+            colors={Gradients.primary.colors}
+            start={Gradients.primary.start}
+            end={Gradients.primary.end}
+            style={styles.loadingGradient}
+          >
+            <ActivityIndicator size="large" color="#FFFFFF" />
+          </LinearGradient>
+          <Text style={[styles.loadingText, { color: currentColors.text }]}>
+            Loading highlights...
+          </Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
-  const renderVideoCard = ({ item }: any) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => router.push(`/video/${item.id}`)}
-      activeOpacity={0.8}
-    >
-      <View style={styles.thumbnailContainer}>
-        <Image source={{ uri: item.thumbnail }} style={styles.thumbnail} />
-        <View style={styles.durationBadge}>
-          <Text style={styles.durationText}>{item.duration}</Text>
+  if (error && videos.length === 0) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: currentColors.background }]}>
+        <View style={styles.errorContainer}>
+          <View style={[styles.errorIconContainer, { backgroundColor: `${currentColors.error}20` }]}>
+            <IconSymbol name="exclamationmark.triangle.fill" size={64} color={currentColors.error} />
+          </View>
+          <Text style={[styles.errorTitle, { color: currentColors.text }]}>
+            Unable to Load Videos
+          </Text>
+          <Text style={[styles.errorMessage, { color: currentColors.textSecondary }]}>
+            {error}
+          </Text>
+          <TouchableOpacity
+            onPress={() => loadVideos()}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={Gradients.primary.colors}
+              start={Gradients.primary.start}
+              end={Gradients.primary.end}
+              style={[styles.retryButton, Shadows.primaryGlow]}
+            >
+              <IconSymbol name="arrow.clockwise" size={20} color="#FFFFFF" />
+              <Text style={styles.retryText}>Retry</Text>
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
-      </View>
-      <View style={styles.cardFooter}>
-        <Ionicons name="play-circle-outline" size={22} color={Colors.primary} />
-        <Text style={styles.title} numberOfLines={2}>
-          {item.title}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
-
-  const getSortLabel = () => {
-    switch (sortBy) {
-      case 'newest': return 'Newest First';
-      case 'oldest': return 'Oldest First';
-      case 'mostViewed': return 'Most Viewed';
-      case 'mostLiked': return 'Most Liked';
-    }
-  };
-
-  const getFilterLabel = () => {
-    switch (filterBy) {
-      case 'all': return 'All Videos';
-      case 'goals': return 'Goals & Scores';
-      case 'assists': return 'Assists';
-      case 'defense': return 'Defense';
-    }
-  };
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: currentColors.background }]}>
       {/* Header */}
-      <View style={styles.topBar}>
-        <Text style={styles.header}>🎬 Match Highlights</Text>
-        <TouchableOpacity
-          style={styles.uploadButton}
-          onPress={() => router.push('/video/upload')}
+      <Animated.View entering={FadeInDown.duration(600).springify()}>
+        <LinearGradient
+          colors={isDark 
+            ? [currentColors.headerBackground, currentColors.background]
+            : [currentColors.headerBackground, currentColors.background]
+          }
+          style={styles.header}
         >
-          <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
-          <Text style={styles.uploadText}>Upload</Text>
-        </TouchableOpacity>
-      </View>
+          <View style={styles.headerContent}>
+            <Animated.View entering={FadeIn.delay(200).duration(600)} style={styles.headerLeft}>
+              <LinearGradient
+                colors={Gradients.primary.colors}
+                start={Gradients.primary.start}
+                end={Gradients.primary.end}
+                style={[styles.logoBox, Shadows.primaryGlow]}
+              >
+                <IconSymbol name="video.fill" size={24} color="#FFFFFF" />
+              </LinearGradient>
+              <View>
+                <Text style={[styles.headerTitle, { color: currentColors.text }]}>
+                  Match Highlights
+                </Text>
+                <Text style={[styles.headerSubtitle, { color: currentColors.primary }]}>
+                  {videos.length} {videos.length === 1 ? 'video' : 'videos'}
+                </Text>
+              </View>
+            </Animated.View>
 
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color={Colors.textSecondary} style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search videos, teams..."
-          placeholderTextColor={Colors.textSecondary}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          returnKeyType="search"
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
-            <Ionicons name="close-circle" size={20} color={Colors.textSecondary} />
-          </TouchableOpacity>
-        )}
-      </View>
+            <Animated.View entering={FadeIn.delay(400).duration(600)}>
+              <TouchableOpacity 
+                onPress={handleUploadPress}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={Gradients.primary.colors}
+                  start={Gradients.primary.start}
+                  end={Gradients.primary.end}
+                  style={[styles.uploadButton, Shadows.primaryGlow]}
+                >
+                  <IconSymbol name="arrow.up.circle.fill" size={20} color="#FFFFFF" />
+                  <Text style={styles.uploadText}>Upload</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </Animated.View>
+          </View>
+        </LinearGradient>
+      </Animated.View>
 
-      {/* Filter and Sort Controls */}
-      <View style={styles.controlsRow}>
-        {/* Filter Dropdown */}
-        <View style={styles.dropdownContainer}>
-          <TouchableOpacity
-            style={styles.dropdown}
-            onPress={() => setShowFilterMenu(!showFilterMenu)}
-          >
-            <Ionicons name="filter" size={18} color={Colors.primary} />
-            <Text style={styles.dropdownText}>{getFilterLabel()}</Text>
-            <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
-          </TouchableOpacity>
+      {/* Videos List */}
+      <FlatList
+        data={videos}
+        keyExtractor={(item) => item.id}
+        renderItem={renderVideoCard}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.listContent}
+        refreshing={refreshing}
+        onRefresh={handleRefresh}
+        ListEmptyComponent={
+          !loading ? (
+            <Animated.View entering={FadeInUp.duration(400)} style={styles.emptyContainer}>
+              <View style={[styles.emptyIconContainer, { backgroundColor: `${currentColors.primary}20` }]}>
+                <IconSymbol name="film.fill" size={64} color={currentColors.primary} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: currentColors.text }]}>
+                No Videos Yet
+              </Text>
+              <Text style={[styles.emptyMessage, { color: currentColors.textSecondary }]}>
+                Upload your first match highlight to get started
+              </Text>
+              <TouchableOpacity onPress={handleUploadPress} activeOpacity={0.8}>
+                <LinearGradient
+                  colors={Gradients.primary.colors}
+                  start={Gradients.primary.start}
+                  end={Gradients.primary.end}
+                  style={[styles.emptyButton, Shadows.primaryGlow]}
+                >
+                  <IconSymbol name="plus.circle.fill" size={20} color="#FFFFFF" />
+                  <Text style={styles.emptyButtonText}>Upload Video</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </Animated.View>
+          ) : null
+        }
+      />
+    </SafeAreaView>
+  );
+}
 
-          {showFilterMenu && (
-            <View style={styles.dropdownMenu}>
-              <TouchableOpacity
-                style={[styles.menuItem, filterBy === 'all' && styles.menuItemActive]}
-                onPress={() => { setFilterBy('all'); setShowFilterMenu(false); }}
-              >
-                <Text style={[styles.menuText, filterBy === 'all' && styles.menuTextActive]}>
-                  All Videos
-                </Text>
-                {filterBy === 'all' && <Ionicons name="checkmark" size={18} color={Colors.primary} />}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.menuItem, filterBy === 'goals' && styles.menuItemActive]}
-                onPress={() => { setFilterBy('goals'); setShowFilterMenu(false); }}
-              >
-                <Text style={[styles.menuText, filterBy === 'goals' && styles.menuTextActive]}>
-                  Goals & Scores
-                </Text>
-                {filterBy === 'goals' && <Ionicons name="checkmark" size={18} color={Colors.primary} />}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.menuItem, filterBy === 'assists' && styles.menuItemActive]}
-                onPress={() => { setFilterBy('assists'); setShowFilterMenu(false); }}
-              >
-                <Text style={[styles.menuText, filterBy === 'assists' && styles.menuTextActive]}>
-                  Assists
-                </Text>
-                {filterBy === 'assists' && <Ionicons name="checkmark" size={18} color={Colors.primary} />}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.menuItem, filterBy === 'defense' && styles.menuItemActive]}
-                onPress={() => { setFilterBy('defense'); setShowFilterMenu(false); }}
-              >
-                <Text style={[styles.menuText, filterBy === 'defense' && styles.menuTextActive]}>
-                  Defense
-                </Text>
-                {filterBy === 'defense' && <Ionicons name="checkmark" size={18} color={Colors.primary} />}
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-
-        {/* Sort Dropdown */}
-        <View style={styles.dropdownContainer}>
-          <TouchableOpacity
-            style={styles.dropdown}
-            onPress={() => setShowSortMenu(!showSortMenu)}
-          >
-            <Ionicons name="swap-vertical" size={18} color={Colors.primary} />
-            <Text style={styles.dropdownText}>{getSortLabel()}</Text>
-            <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
-          </TouchableOpacity>
-
-          {showSortMenu && (
-            <View style={styles.dropdownMenu}>
-              <TouchableOpacity
-                style={[styles.menuItem, sortBy === 'newest' && styles.menuItemActive]}
-                onPress={() => { setSortBy('newest'); setShowSortMenu(false); }}
-              >
-                <Text style={[styles.menuText, sortBy === 'newest' && styles.menuTextActive]}>
-                  Newest First
-                </Text>
-                {sortBy === 'newest' && <Ionicons name="checkmark" size={18} color={Colors.primary} />}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.menuItem, sortBy === 'oldest' && styles.menuItemActive]}
-                onPress={() => { setSortBy('oldest'); setShowSortMenu(false); }}
-              >
-                <Text style={[styles.menuText, sortBy === 'oldest' && styles.menuTextActive]}>
-                  Oldest First
-                </Text>
-                {sortBy === 'oldest' && <Ionicons name="checkmark" size={18} color={Colors.primary} />}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.menuItem, sortBy === 'mostViewed' && styles.menuItemActive]}
-                onPress={() => { setSortBy('mostViewed'); setShowSortMenu(false); }}
-              >
-                <Text style={[styles.menuText, sortBy === 'mostViewed' && styles.menuTextActive]}>
-                  Most Viewed
-                </Text>
-                {sortBy === 'mostViewed' && <Ionicons name="checkmark" size={18} color={Colors.primary} />}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.menuItem, sortBy === 'mostLiked' && styles.menuItemActive]}
-                onPress={() => { setSortBy('mostLiked'); setShowSortMenu(false); }}
-              >
-                <Text style={[styles.menuText, sortBy === 'mostLiked' && styles.menuTextActive]}>
-                  Most Liked
-                </Text>
-                {sortBy === 'mostLiked' && <Ionicons name="checkmark" size={18} color={Colors.primary} />}
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      </View>
-
-      {/* Results Count */}
-      {searchQuery.trim() && (
-        <Text style={styles.resultsText}>
-          {filteredAndSortedVideos.length} result{filteredAndSortedVideos.length !== 1 ? 's' : ''} found
-        </Text>
-      )}
-
-      {/* Video List */}
-      {videos.length === 0 ? (
-        <EmptyState
-          icon="video.fill"
-          title="No Videos Yet"
-          description="Upload your first game film to get started with AI-powered analysis and insights"
-          actionLabel="Upload Video"
-          onAction={() => router.push('/video/upload')}
-        />
-      ) : filteredAndSortedVideos.length === 0 ? (
-        <EmptyState
-          icon="search"
-          title="No Results Found"
-          description="Try adjusting your search or filters"
-          actionLabel="Clear Filters"
-          onAction={() => {
-            setSearchQuery('');
-            setFilterBy('all');
-          }}
-        />
-      ) : (
-        <FlatList
-          data={filteredAndSortedVideos}
-          keyExtractor={(item) => item.id}
-          renderItem={renderVideoCard}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 100 }}
-        />
-      )}
-    </View>
+export default function VideosScreen() {
+  return (
+    <ComponentErrorBoundary componentName="VideosScreen">
+      <VideosScreenContent />
+    </ComponentErrorBoundary>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: Spacing.md, backgroundColor: Colors.background },
-  topBar: {
+  container: { 
+    flex: 1,
+  },
+
+  // Header
+  header: {
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+  },
+  headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.md,
-    marginTop: 20,
   },
-  header: {
-    fontSize: Typography.headline,
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  logoBox: {
+    width: 48,
+    height: 48,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: Typography.title3,
     fontWeight: '700',
-    color: Colors.text
+    letterSpacing: 0.5,
+  },
+  headerSubtitle: {
+    fontSize: Typography.caption,
+    fontWeight: '600',
+    marginTop: 2,
   },
   uploadButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.primary,
-    paddingHorizontal: Spacing.md,
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.sm,
+    borderRadius: BorderRadius.lg,
   },
   uploadText: {
-    color: '#fff',
-    fontWeight: '600',
-    marginLeft: 6,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: Typography.callout,
   },
-  // Search Bar
-  searchContainer: {
+
+  // List
+  listContent: {
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.xxxl,
+  },
+
+  // Card
+  cardWrapper: {
+    marginBottom: Spacing.lg,
+  },
+  card: {
+    borderRadius: BorderRadius.xl,
+    overflow: 'hidden',
+  },
+  thumbnailContainer: {
+    position: 'relative',
+    width: '100%',
+    height: 220,
+  },
+  thumbnail: {
+    width: '100%',
+    height: '100%',
+  },
+  thumbnailPlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  thumbnailGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '50%',
+  },
+  playOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playButton: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  durationBadge: {
+    position: 'absolute',
+    bottom: Spacing.md,
+    right: Spacing.md,
+    borderRadius: BorderRadius.md,
+    overflow: 'hidden',
+  },
+  durationBlur: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    paddingHorizontal: Spacing.md,
-    marginBottom: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
   },
-  searchIcon: {
-    marginRight: Spacing.sm,
+  durationText: {
+    color: '#FFFFFF',
+    fontSize: Typography.footnote,
+    fontWeight: '700',
   },
-  searchInput: {
-    flex: 1,
-    paddingVertical: Spacing.md,
-    fontSize: Typography.body,
-    color: Colors.text,
+  cornerAccent: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 40,
+    height: 40,
+    borderBottomLeftRadius: BorderRadius.xl,
   },
-  clearButton: {
-    padding: Spacing.xs,
+
+  // Card Content
+  cardContent: {
+    padding: Spacing.lg,
   },
-  // Filter and Sort Controls
-  controlsRow: {
+  titleRow: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: Spacing.sm,
     marginBottom: Spacing.md,
   },
-  dropdownContainer: {
-    flex: 1,
-    position: 'relative',
-    zIndex: 1000,
+  iconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
   },
-  dropdown: {
+  title: {
+    flex: 1,
+    fontWeight: '700',
+    fontSize: Typography.body,
+    lineHeight: 22,
+  },
+  statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: BorderRadius.sm,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.sm,
+    gap: Spacing.md,
+  },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.xs,
   },
-  dropdownText: {
-    flex: 1,
+  statText: {
     fontSize: Typography.callout,
-    color: Colors.text,
-    fontWeight: '500',
+    fontWeight: '600',
   },
-  dropdownMenu: {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    right: 0,
-    marginTop: 4,
-    backgroundColor: Colors.cardBackground,
-    borderRadius: BorderRadius.sm,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 8,
-    elevation: 5,
-    zIndex: 2000,
+  statDivider: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
   },
-  menuItem: {
+
+  // Loading
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingGradient: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  loadingText: {
+    fontSize: Typography.body,
+    fontWeight: '600',
+  },
+
+  // Error
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
+  },
+  errorIconContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  errorTitle: {
+    fontSize: Typography.title2,
+    fontWeight: '700',
+    marginBottom: Spacing.sm,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: Typography.body,
+    textAlign: 'center',
+    marginBottom: Spacing.xl,
+    lineHeight: 22,
+  },
+  retryButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.md,
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.borderLight,
+    borderRadius: BorderRadius.lg,
   },
-  menuItemActive: {
-    backgroundColor: Colors.surface,
+  retryText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: Typography.body,
   },
-  menuText: {
-    fontSize: Typography.callout,
-    color: Colors.text,
+
+  // Empty State
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.xxxl,
   },
-  menuTextActive: {
-    fontWeight: '600',
-    color: Colors.primary,
+  emptyIconContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
   },
-  // Results
-  resultsText: {
-    fontSize: Typography.subhead,
-    color: Colors.textSecondary,
+  emptyTitle: {
+    fontSize: Typography.title2,
+    fontWeight: '700',
     marginBottom: Spacing.sm,
+    textAlign: 'center',
   },
-  // Video Cards
-  card: {
-    marginBottom: 20,
-    borderRadius: 14,
-    backgroundColor: Colors.cardBackground,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 6,
-    elevation: 3,
+  emptyMessage: {
+    fontSize: Typography.body,
+    textAlign: 'center',
+    marginBottom: Spacing.xl,
+    lineHeight: 22,
   },
-  thumbnailContainer: { position: 'relative' },
-  thumbnail: { width: '100%', height: 200 },
-  durationBadge: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+  emptyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.lg,
   },
-  durationText: { color: '#fff', fontSize: 12 },
-  cardFooter: { flexDirection: 'row', alignItems: 'center', padding: Spacing.sm },
-  title: { flex: 1, marginLeft: 8, color: Colors.text, fontWeight: '500', fontSize: 15 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  emptyButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: Typography.body,
+  },
 });

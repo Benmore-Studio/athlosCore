@@ -1,4 +1,4 @@
-export const mockVideos = [
+export const Video = [
     {
       id: '1',
       title: 'Pera Sports Highlight: Arsenal vs Chelsea',

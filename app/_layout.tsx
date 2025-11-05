@@ -1,40 +1,110 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+// File: app/_layout.tsx
+import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { AuthProvider } from '@/contexts/AuthContext';
+import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
+import { OfflineProvider } from '@/contexts/OfflineContext';
+import OfflineBanner from '@/components/OfflineBanner';
 import 'react-native-reanimated';
-
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useStoreInitialization } from '@/hooks/useStoreInitialization';
+import React from 'react';
 
 export const unstable_settings = {
   anchor: '(tabs)',
 };
 
-export default function RootLayout() {
-  const colorScheme = useColorScheme();
-  const { initError } = useStoreInitialization();
-
-  // Log initialization errors
-  useEffect(() => {
-    if (initError) {
-      console.error('Store initialization error:', initError);
-    }
-  }, [initError]);
+function RootLayoutNav() {
+  const { isDark } = useTheme();
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack
-        screenOptions={{
-          headerShown: false,
-        }}
-      >
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="welcome" />
-        <Stack.Screen name="video" />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <>
+      <OfflineBanner />
+      <NavigationThemeProvider value={isDark ? DarkTheme : DefaultTheme}>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen 
+            name="settings" 
+            options={{ 
+              presentation: 'card',
+              animation: 'slide_from_right',
+              headerShown: false,
+            }} 
+          />
+          <Stack.Screen 
+            name="modal" 
+            options={{ 
+              presentation: 'modal', 
+              title: 'Modal', 
+              headerShown: true 
+            }} 
+          />
+        </Stack>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+      </NavigationThemeProvider>
+    </>
   );
 }
+
+export default function RootLayout() {
+  return (
+    <OfflineProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <RootLayoutNav />
+        </AuthProvider>
+      </ThemeProvider>
+    </OfflineProvider>
+  );
+}
+
+// // File: app/_layout.tsx
+// import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
+// import { Stack } from 'expo-router';
+// import { StatusBar } from 'expo-status-bar';
+// import { AuthProvider } from '@/contexts/AuthContext';
+// import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
+// import 'react-native-reanimated';
+
+// export const unstable_settings = {
+//   anchor: '(tabs)',
+// };
+
+// function RootLayoutNav() {
+//   const { isDark } = useTheme();
+
+//   return (
+//     <NavigationThemeProvider value={isDark ? DarkTheme : DefaultTheme}>
+//       <Stack screenOptions={{ headerShown: false }}>
+//         <Stack.Screen name="(auth)" />
+//         <Stack.Screen name="(tabs)" />
+//         <Stack.Screen 
+//           name="settings" 
+//           options={{ 
+//             presentation: 'card',
+//             animation: 'slide_from_right',
+//           }} 
+//         />
+//         <Stack.Screen 
+//           name="modal" 
+//           options={{ 
+//             presentation: 'modal', 
+//             title: 'Modal', 
+//             headerShown: true 
+//           }} 
+//         />
+//       </Stack>
+//       <StatusBar style={isDark ? 'light' : 'dark'} />
+//     </NavigationThemeProvider>
+//   );
+// }
+
+// export default function RootLayout() {
+//   return (
+//     <ThemeProvider>
+//       <AuthProvider>
+//         <RootLayoutNav />
+//       </AuthProvider>
+//     </ThemeProvider>
+//   );
+// }
