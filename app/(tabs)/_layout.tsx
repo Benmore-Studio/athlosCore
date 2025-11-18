@@ -5,9 +5,12 @@ import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ErrorBoundary } from '@/components/error-boundary';
+import { useDeepLinking } from '@/hooks/useDeepLinking';
 
 export default function TabLayout() {
   const { currentColors } = useTheme();
+
+  useDeepLinking();
 
   return (
     <ErrorBoundary>

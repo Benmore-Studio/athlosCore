@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -15,28 +15,65 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
 import { fetchVideos } from '@/services/videoService';
+import { useVideoStore } from '@/stores'; // ✅ Import video store
+import { useAuth } from '@/contexts/AuthContext'; // ✅ Import auth context
 import { useTheme } from '@/contexts/ThemeContext';
 import { BorderRadius, Spacing, Typography, Shadows, Gradients } from '@/constants/theme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import * as Sentry from '@sentry/react-native';
 import { ComponentErrorBoundary } from '@/components/component-error-boundary';
 
-interface Video {
-  id: string;
-  title: string;
-  thumbnail?: string;
-  duration?: string;
-  views?: string;
-  date?: string;
-}
+// ✅ Mock videos for demo/fallback
+const MOCK_VIDEOS = [
+  {
+    id: 'mock-1',
+    title: 'Warriors vs Lakers - Full Game Highlights',
+    thumbnail: 'https://picsum.photos/400/300?random=1',
+    duration: '12:45',
+    views: '1.2K',
+    date: '2 days ago',
+    videoUrl: 'https://example.com/video1.mp4',
+    uploadedAt: new Date().toISOString(),
+  },
+  {
+    id: 'mock-2',
+    title: 'Amazing Buzzer Beater - Game Winner',
+    thumbnail: 'https://picsum.photos/400/300?random=2',
+    duration: '8:30',
+    views: '856',
+    date: '5 days ago',
+    videoUrl: 'https://example.com/video2.mp4',
+    uploadedAt: new Date().toISOString(),
+  },
+  {
+    id: 'mock-3',
+    title: 'Top 10 Plays of the Week',
+    thumbnail: 'https://picsum.photos/400/300?random=3',
+    duration: '15:20',
+    views: '2.5K',
+    date: '1 week ago',
+    videoUrl: 'https://example.com/video3.mp4',
+    uploadedAt: new Date().toISOString(),
+  },
+];
 
 function VideosScreenContent() {
   const router = useRouter();
   const { currentColors, isDark } = useTheme();
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const { isDemoMode } = useAuth();
+  
+  // ✅ Use Zustand store instead of local state
+  const { 
+    videos, 
+    setVideos, 
+    isLoading,
+    error,
+    setLoading,
+    setError 
+  } = useVideoStore();
+
+  const [refreshing, setRefreshing] = React.useState(false);
+  const [usingMockData, setUsingMockData] = React.useState(false);
 
   const loadVideos = async (isRefresh = false) => {
     try {
@@ -47,12 +84,29 @@ function VideosScreenContent() {
       }
       
       setError(null);
+
+      // ✅ Use mock data in demo mode
+      if (isDemoMode) {
+        console.log('📦 Using mock videos (Demo Mode)');
+        setVideos(MOCK_VIDEOS);
+        setUsingMockData(true);
+        return;
+      }
       
       const data = await fetchVideos();
+      // ✅ Store videos in Zustand
       setVideos(Array.isArray(data) ? data : []);
+      setUsingMockData(false);
+      
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to load videos';
-      setError(errorMsg);
+      
+      // ✅ Fallback to mock data on error
+      console.error('API fetch failed, using mock data:', err);
+      console.log('📦 Using mock videos (API Fallback)');
+      setVideos(MOCK_VIDEOS);
+      setUsingMockData(true);
+      setError('Unable to connect to server. Using sample data.');
       
       Sentry.captureException(err, {
         tags: { screen: 'videos', action: 'load_videos' },
@@ -64,14 +118,6 @@ function VideosScreenContent() {
       
       console.error('Error loading videos:', err);
       
-      Alert.alert(
-        'Unable to Load Videos',
-        errorMsg,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Retry', onPress: () => loadVideos(isRefresh) }
-        ]
-      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -119,7 +165,7 @@ function VideosScreenContent() {
     }
   };
 
-  const renderVideoCard = ({ item, index }: { item: Video; index: number }) => {
+  const renderVideoCard = ({ item, index }: { item: any; index: number }) => {
     if (!item) return null;
 
     return (
@@ -216,7 +262,8 @@ function VideosScreenContent() {
     );
   };
 
-  if (loading && !refreshing) {
+  // ✅ Loading state from store
+  if (isLoading && !refreshing) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: currentColors.background }]}>
         <View style={styles.loadingContainer}>
@@ -236,7 +283,8 @@ function VideosScreenContent() {
     );
   }
 
-  if (error && videos.length === 0) {
+  // ✅ Error state from store (only show if no videos and not using mock data)
+  if (error && videos.length === 0 && !usingMockData) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: currentColors.background }]}>
         <View style={styles.errorContainer}>
@@ -319,6 +367,23 @@ function VideosScreenContent() {
         </LinearGradient>
       </Animated.View>
 
+      {/* ✅ Mock Data Banner */}
+      {usingMockData && (
+        <Animated.View 
+          entering={FadeIn.duration(300)}
+          style={[styles.mockDataBanner, { backgroundColor: currentColors.warning + '15' }]}
+        >
+          <IconSymbol 
+            name="info.circle.fill" 
+            size={20} 
+            color={currentColors.warning}
+          />
+          <Text style={[styles.mockDataText, { color: currentColors.warning }]}>
+            {isDemoMode ? 'Demo Mode - Sample Videos' : 'Using sample data - API unavailable'}
+          </Text>
+        </Animated.View>
+      )}
+
       {/* Videos List */}
       <FlatList
         data={videos}
@@ -329,7 +394,7 @@ function VideosScreenContent() {
         refreshing={refreshing}
         onRefresh={handleRefresh}
         ListEmptyComponent={
-          !loading ? (
+          !isLoading ? (
             <Animated.View entering={FadeInUp.duration(400)} style={styles.emptyContainer}>
               <View style={[styles.emptyIconContainer, { backgroundColor: `${currentColors.primary}20` }]}>
                 <IconSymbol name="film.fill" size={64} color={currentColors.primary} />
@@ -416,6 +481,23 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: Typography.callout,
+  },
+
+  // ✅ Mock Data Banner
+  mockDataBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    marginHorizontal: Spacing.xl,
+    marginTop: Spacing.md,
+    borderRadius: BorderRadius.lg,
+  },
+
+  mockDataText: {
+    flex: 1,
+    fontSize: Typography.callout,
+    fontWeight: '600',
   },
 
   // List

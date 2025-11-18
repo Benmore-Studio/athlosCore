@@ -1,11 +1,10 @@
-// File: components/dashboard/WelcomeHero.tsx
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import Animated, { ZoomIn, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
-import Card from '@/components/ui/card';
+import Card from '@/components/ui/Card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import PlayerAvatar from '@/components/ui/playerAvatar';
+import PlayerAvatar from '@/components/ui/PlayerAvatar';
 import { BorderRadius, Spacing, Typography, Animation } from '@/constants/theme';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -16,9 +15,22 @@ interface WelcomeHeroProps {
   record: string;
   nextGame: string;
   onViewFilm: () => void;
+  // ✅ NEW: Accessibility props
+  accessibilityLabel?: string;
+  viewFilmAccessibilityLabel?: string;
+  viewFilmAccessibilityHint?: string;
 }
 
-export default function WelcomeHero({ coachName, coachImageUri, record, nextGame, onViewFilm }: WelcomeHeroProps) {
+export default function WelcomeHero({ 
+  coachName, 
+  coachImageUri, 
+  record, 
+  nextGame, 
+  onViewFilm,
+  accessibilityLabel,
+  viewFilmAccessibilityLabel,
+  viewFilmAccessibilityHint,
+}: WelcomeHeroProps) {
   const scale = useSharedValue(1);
 
   const handlePressIn = () => {
@@ -34,7 +46,12 @@ export default function WelcomeHero({ coachName, coachImageUri, record, nextGame
   }));
 
   return (
-    <Animated.View entering={ZoomIn.delay(600).duration(800).springify()}>
+    <Animated.View 
+      entering={ZoomIn.delay(600).duration(800).springify()}
+      // ✅ ADD: Card accessibility
+      accessibilityRole="summary"
+      accessibilityLabel={accessibilityLabel || `Welcome back, ${coachName.split(' ')[0]}. Team record: ${record}. Next game: ${nextGame}`}
+    >
       <Card variant="gradient" padding="large" style={styles.card}>
         <View style={styles.header}>
           <View style={styles.textContainer}>
@@ -42,12 +59,22 @@ export default function WelcomeHero({ coachName, coachImageUri, record, nextGame
               Welcome back, {coachName.split(' ')[0]}! 🏀
             </Text>
             <View style={styles.stats}>
-              <View style={styles.badge}>
+              <View 
+                style={styles.badge}
+                accessible={true}
+                accessibilityLabel={`Team record: ${record}`}
+              >
                 <IconSymbol name="star.fill" size={14} color={'dark'} />
                 <Text style={styles.badgeText}>{record}</Text>
               </View>
               <View style={styles.divider} />
-              <Text style={styles.subtitle}>Next: {nextGame}</Text>
+              <Text 
+                style={styles.subtitle}
+                accessible={true}
+                accessibilityLabel={`Next game: ${nextGame}`}
+              >
+                Next: {nextGame}
+              </Text>
             </View>
           </View>
           
@@ -66,6 +93,10 @@ export default function WelcomeHero({ coachName, coachImageUri, record, nextGame
           onPressOut={handlePressOut}
           onPress={onViewFilm}
           style={[buttonAnimatedStyle, styles.buttonContainer]}
+          // ✅ ADD: Button accessibility
+          accessibilityRole="button"
+          accessibilityLabel={viewFilmAccessibilityLabel || "View latest game film"}
+          accessibilityHint={viewFilmAccessibilityHint || "Opens the most recent game recording"}
         >
           <BlurView intensity={20} tint="light" style={styles.button}>
             <IconSymbol name="video.fill" size={20} color={'dark'} />

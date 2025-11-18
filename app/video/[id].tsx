@@ -12,15 +12,16 @@ import Animated, {
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import VideoPlayer from '@/components/ui/videoPlayer';
-import Card from '@/components/ui/card';
-import PlayerAvatar from '@/components/ui/playerAvatar';
+import VideoPlayer from '@/components/ui/VideoPlayer';
+import Card from '@/components/ui/Card';
+import PlayerAvatar from '@/components/ui/PlayerAvatar';
 import videoService from '@/services/api/videoService';
 import { Colors, DarkColors, Typography, Spacing, BorderRadius, Shadows, Gradients, Animation } from '@/constants/theme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ComponentErrorBoundary } from '@/components/component-error-boundary';
 import * as Sentry from '@sentry/react-native';
+import { shareLink, copyLinkToClipboard } from '@/utils/shareLink'; // ✅ Import share utilities
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -74,13 +75,8 @@ function VideoDetailScreenContent() {
       setLoading(true);
       setError(null);
 
-      // Fetch streaming URL
       const { stream_url, video_metadata } = await videoService.getStreamingUrl(id);
 
-      // Optionally fetch additional video details if you have an endpoint
-      // const videoDetails = await videoService.getVideoDetails(id);
-
-      // Construct video object from API response
       const videoData: VideoData = {
         id: id,
         title: video_metadata?.title || 'Untitled Video',
@@ -105,8 +101,6 @@ function VideoDetailScreenContent() {
       };
 
       setVideo(videoData);
-      
-      // Track video view
       await trackVideoView(id);
 
     } catch (err) {
@@ -135,11 +129,8 @@ function VideoDetailScreenContent() {
 
   const trackVideoView = async (videoId: string) => {
     try {
-      // If you have an analytics endpoint
-      // await videoService.trackView(videoId);
       console.log('Video view tracked:', videoId);
     } catch (err) {
-      // Silently fail - don't interrupt user experience
       console.error('Failed to track view:', err);
     }
   };
@@ -154,17 +145,8 @@ function VideoDetailScreenContent() {
         withSpring(1, Animation.spring.smooth)
       );
 
-      // If you have a like endpoint
-      // if (newLikedState) {
-      //   await videoService.likeVideo(id);
-      //   setVideo(prev => prev ? { ...prev, likes: (prev.likes || 0) + 1 } : null);
-      // } else {
-      //   await videoService.unlikeVideo(id);
-      //   setVideo(prev => prev ? { ...prev, likes: Math.max((prev.likes || 0) - 1, 0) } : null);
-      // }
-
     } catch (err) {
-      setLiked(!liked); // Revert on error
+      setLiked(!liked);
       console.error('Failed to like video:', err);
       Alert.alert('Error', 'Failed to update like status');
     }
@@ -180,38 +162,58 @@ function VideoDetailScreenContent() {
         withSpring(1, Animation.spring.smooth)
       );
 
-      // If you have a bookmark endpoint
-      // if (newBookmarkedState) {
-      //   await videoService.bookmarkVideo(id);
-      // } else {
-      //   await videoService.unbookmarkVideo(id);
-      // }
-
     } catch (err) {
-      setBookmarked(!bookmarked); // Revert on error
+      setBookmarked(!bookmarked);
       console.error('Failed to bookmark video:', err);
       Alert.alert('Error', 'Failed to update bookmark status');
     }
   };
 
+  // ✅ NEW: Enhanced share functionality
   const handleShare = async () => {
     try {
-      // Implement share functionality
-      // You can use expo-sharing or react-native-share
-      Alert.alert('Share', 'Share functionality coming soon!');
+      if (!video) return;
+
+      Alert.alert(
+        'Share Video',
+        'How would you like to share this video?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Copy Link',
+            onPress: async () => {
+              const success = await copyLinkToClipboard({
+                type: 'video',
+                id: id,
+              });
+              if (success) {
+                Alert.alert('Success', 'Video link copied to clipboard!');
+              }
+            },
+          },
+          {
+            text: 'Share',
+            onPress: async () => {
+              await shareLink({
+                type: 'video',
+                id: id,
+                title: video.title,
+                message: `Check out this video: ${video.title}`,
+              });
+            },
+          },
+        ]
+      );
     } catch (err) {
       console.error('Failed to share video:', err);
+      Alert.alert('Error', 'Failed to share video');
     }
   };
 
   const handleSubscribe = async () => {
     try {
       if (!video?.uploader) return;
-      
-      // If you have a subscribe endpoint
-      // await videoService.subscribeToUser(video.uploader.id);
       Alert.alert('Subscribed!', `You're now subscribed to ${video.uploader.name}`);
-      
     } catch (err) {
       console.error('Failed to subscribe:', err);
       Alert.alert('Error', 'Failed to subscribe');
@@ -255,7 +257,6 @@ function VideoDetailScreenContent() {
     transform: [{ scale: bookmarkScale.value }],
   }));
 
-  // Loading State
   if (loading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: currentColors.background }]}>
@@ -278,7 +279,6 @@ function VideoDetailScreenContent() {
     );
   }
 
-  // Error State
   if (error || !video) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: currentColors.background }]}>
@@ -330,7 +330,12 @@ function VideoDetailScreenContent() {
           entering={FadeIn.delay(100).duration(300)}
         >
           <BlurView intensity={20} tint={isDark ? 'dark' : 'light'} style={styles.backButtonBlur}>
-            <TouchableOpacity onPress={() => router.back()}>
+            <TouchableOpacity 
+              onPress={() => router.back()}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+              accessibilityHint="Returns to previous screen"
+            >
               <IconSymbol 
                 name="chevron.left" 
                 size={24} 
@@ -353,13 +358,17 @@ function VideoDetailScreenContent() {
         {/* Video Info Section */}
         <Animated.View entering={FadeInDown.delay(300).springify()}>
           <Card variant="elevated" padding="large" style={styles.infoCard}>
-            {/* Title */}
             <Text style={[styles.title, { color: currentColors.text }]}>
               {video.title}
             </Text>
 
             {/* Stats Row */}
-            <View style={styles.statsRow}>
+            <View 
+              style={styles.statsRow}
+              accessible={true}
+              accessibilityRole="text"
+              accessibilityLabel={`${formatViews(video.views || 0)} views, ${video.duration || 'unknown duration'}, uploaded ${formatDate(video.uploadDate)}`}
+            >
               <View style={styles.statItem}>
                 <IconSymbol 
                   name="eye.fill" 
@@ -403,6 +412,9 @@ function VideoDetailScreenContent() {
               <AnimatedPressable 
                 onPress={handleLike}
                 style={[likeAnimatedStyle]}
+                accessibilityRole="button"
+                accessibilityLabel={liked ? 'Unlike video' : 'Like video'}
+                accessibilityState={{ selected: liked }}
               >
                 <LinearGradient
                   colors={liked ? Gradients.primary.colors : [currentColors.surface, currentColors.surface]}
@@ -425,6 +437,9 @@ function VideoDetailScreenContent() {
               <AnimatedPressable 
                 onPress={handleBookmark}
                 style={[bookmarkAnimatedStyle]}
+                accessibilityRole="button"
+                accessibilityLabel={bookmarked ? 'Remove from saved' : 'Save video'}
+                accessibilityState={{ selected: bookmarked }}
               >
                 <View style={[
                   styles.actionButton,
@@ -445,7 +460,13 @@ function VideoDetailScreenContent() {
                 </View>
               </AnimatedPressable>
 
-              <TouchableOpacity onPress={handleShare}>
+              {/* ✅ UPDATED: Share button with accessibility */}
+              <TouchableOpacity 
+                onPress={handleShare}
+                accessibilityRole="button"
+                accessibilityLabel="Share video"
+                accessibilityHint="Opens share options"
+              >
                 <View style={[styles.actionButton, { backgroundColor: currentColors.surface }]}>
                   <IconSymbol 
                     name="square.and.arrow.up" 
@@ -464,7 +485,14 @@ function VideoDetailScreenContent() {
         {/* Uploader Info */}
         {video.uploader && (
           <Animated.View entering={SlideInRight.delay(400).springify()}>
-            <Card variant="elevated" padding="medium" style={styles.uploaderCard}>
+            <Card 
+              variant="elevated" 
+              padding="medium" 
+              style={styles.uploaderCard}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel={`${video.uploader.name}, ${video.uploader.subscribers ? formatViews(video.uploader.subscribers) + ' subscribers' : 'No subscribers yet'}`}
+            >
               <View style={styles.uploaderRow}>
                 <PlayerAvatar 
                   name={video.uploader.name}
@@ -485,7 +513,12 @@ function VideoDetailScreenContent() {
                   </Text>
                 </View>
 
-                <TouchableOpacity onPress={handleSubscribe}>
+                <TouchableOpacity 
+                  onPress={handleSubscribe}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Subscribe to ${video.uploader.name}`}
+                  accessibilityHint="Subscribes to this channel"
+                >
                   <LinearGradient
                     colors={Gradients.primary.colors}
                     style={styles.subscribeButton}
@@ -501,7 +534,14 @@ function VideoDetailScreenContent() {
         {/* Description */}
         {video.description && (
           <Animated.View entering={FadeInDown.delay(500).springify()}>
-            <Card variant="outlined" padding="large" style={styles.descriptionCard}>
+            <Card 
+              variant="outlined" 
+              padding="large" 
+              style={styles.descriptionCard}
+              accessible={true}
+              accessibilityRole="text"
+              accessibilityLabel={`Description: ${video.description}`}
+            >
               <View style={styles.descriptionHeader}>
                 <IconSymbol 
                   name="doc.text" 
@@ -521,7 +561,14 @@ function VideoDetailScreenContent() {
 
         {/* Video Stats Card */}
         <Animated.View entering={FadeInDown.delay(600).springify()}>
-          <Card variant="gradient" padding="large" style={styles.statsCard}>
+          <Card 
+            variant="gradient" 
+            padding="large" 
+            style={styles.statsCard}
+            accessible={true}
+            accessibilityRole="summary"
+            accessibilityLabel={`Video performance: ${formatViews(video.likes || 0)} likes, ${video.rating?.toFixed(1) || 'no'} rating, ${formatViews(video.shares || 0)} shares`}
+          >
             <Text style={styles.statsCardTitle}>Video Performance</Text>
             
             <View style={styles.performanceGrid}>

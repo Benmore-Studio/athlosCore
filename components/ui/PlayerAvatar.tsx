@@ -29,7 +29,7 @@ interface PlayerAvatarProps {
   animate?: boolean;
 }
 
-export default function PlayerAvatar({
+function PlayerAvatar({
   imageUri,
   name,
   jerseyNumber,
@@ -385,3 +385,6 @@ const styles = StyleSheet.create({
     fontSize: Typography.callout,
   },
 });
+
+// ✅ Add default export
+export default PlayerAvatar;

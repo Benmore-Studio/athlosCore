@@ -46,6 +46,29 @@ export default function LoginScreen() {
     } catch (error: any) {
       console.error('Login error:', error);
       console.error('Error response:', error.response);
+      console.error('Full error object:', JSON.stringify(error, null, 2));
+      console.error('Error keys:', Object.keys(error));
+      console.error('Error config:', error.config);
+      console.error('Error request:', error.request);
+      console.error('Error stack:', error.stack);
+      
+      // Log all error properties
+      console.log('=== DETAILED ERROR BREAKDOWN ===');
+      console.log('error.message:', error.message);
+      console.log('error.code:', error.code);
+      console.log('error.name:', error.name);
+      console.log('error.response:', error.response);
+      console.log('error.response?.status:', error.response?.status);
+      console.log('error.response?.statusText:', error.response?.statusText);
+      console.log('error.response?.data:', error.response?.data);
+      console.log('error.response?.headers:', error.response?.headers);
+      console.log('error.config?.baseURL:', error.config?.baseURL);
+      console.log('error.config?.url:', error.config?.url);
+      console.log('error.config?.method:', error.config?.method);
+      console.log('error.config?.data:', error.config?.data);
+      console.log('error.config?.headers:', error.config?.headers);
+      console.log('error.config?.timeout:', error.config?.timeout);
+      console.log('================================');
       
       const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message;
       

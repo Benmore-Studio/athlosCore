@@ -1,62 +1,220 @@
+// File: services/api/authService.ts
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from './client';
 import { API_ENDPOINTS } from '@/config/api';
 
-export interface LoginCredentials {
+const AUTH_TOKEN_KEY = 'auth_token'; // ✅ Match the key used in apiClient
+const USER_DATA_KEY = 'userData';
+
+interface LoginCredentials {
   email: string;
   password: string;
 }
 
-export interface RegisterData {
-  full_name: string;
+interface RegisterCredentials {
   email: string;
   password: string;
-  org_name?: string;
-  org_ids?: string[];
+  full_name: string; // ✅ API expects "full_name" not "name"
+  org_name?: string; // ✅ Optional: create new org
+  org_ids?: string[]; // ✅ Optional: join existing orgs
 }
 
-export interface Organization {
+// ✅ API returns ONLY token for login
+interface LoginResponse {
+  token: string;
+}
+
+// ✅ API returns user_id, email, organizations for register
+interface RegisterResponse {
+  user_id: string;
+  email: string;
+  organizations: string[];
+}
+
+// ✅ Organization structure from API
+interface Organization {
   org_id: string;
   name: string;
   created_at: string;
   last_updated_at: string;
 }
 
-class AuthService {
-  async login(credentials: LoginCredentials): Promise<string> {
-    const response = await apiClient.post(API_ENDPOINTS.LOGIN, credentials);
-    const { token } = response.data;
-    await AsyncStorage.setItem('auth_token', token);
-    return token;
-  }
-
-  async register(data: RegisterData): Promise<{ user_id: string; email: string; organizations: string[] }> {
-    const response = await apiClient.post(API_ENDPOINTS.REGISTER, data);
-    return response.data;
-  }
-
-  async getOrganizations(): Promise<Organization[]> {
-    const response = await apiClient.get(API_ENDPOINTS.ORGS_LIST);
-    return response.data;
-  }
-
-  async checkOrgName(name: string): Promise<{ exists: boolean; organization?: Organization }> {
-    const response = await apiClient.get(`${API_ENDPOINTS.CHECK_ORG_NAME}?name=${encodeURIComponent(name)}`);
-    return response.data;
-  }
-
-  async logout(): Promise<void> {
-    await AsyncStorage.removeItem('auth_token');
-  }
-
-  async getToken(): Promise<string | null> {
-    return AsyncStorage.getItem('auth_token');
-  }
-
-  async isAuthenticated(): Promise<boolean> {
-    const token = await this.getToken();
-    return !!token;
-  }
+// ✅ Org name check response
+interface OrgNameCheckResponse {
+  exists: boolean;
+  organization: {
+    org_id: string;
+    name: string;
+  } | null;
 }
 
-export default new AuthService();
+const authService = {
+  async login(credentials: LoginCredentials): Promise<string> {
+    try {
+      console.log('🔐 Calling login API...');
+      const response = await apiClient.post(API_ENDPOINTS.LOGIN, credentials);
+      
+      // ✅ API returns { "token": "..." } ONLY
+      const data: LoginResponse = response.data;
+      
+      // ✅ Store token
+      await AsyncStorage.setItem(AUTH_TOKEN_KEY, data.token);
+      
+      // ✅ Store email as basic user data
+      await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify({ 
+        email: credentials.email 
+      }));
+      
+      console.log('✅ Login successful, token stored');
+      return data.token;
+    } catch (error: any) {
+      console.error('❌ Login error:', error.response?.data || error.message);
+      
+      // ✅ API returns "Invalid email or password" as string for 401
+      if (error.response?.status === 401) {
+        throw new Error(error.response?.data || 'Invalid email or password');
+      }
+      
+      throw new Error(error.response?.data?.message || error.message || 'Login failed');
+    }
+  },
+
+  async register(credentials: RegisterCredentials): Promise<RegisterResponse> {
+    try {
+      console.log('📝 Calling register API...');
+      
+      // ✅ API expects: full_name, email, password, org_name?, org_ids?
+      const response = await apiClient.post(API_ENDPOINTS.REGISTER, credentials);
+      
+      // ✅ API returns { user_id, email, organizations }
+      const data: RegisterResponse = response.data;
+      
+      // ✅ Store user data (NO TOKEN returned from register)
+      await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(data));
+      
+      console.log('✅ Registration successful');
+      console.log('ℹ️ Note: User must login separately after registration');
+      return data;
+    } catch (error: any) {
+      console.error('❌ Register error:', error.response?.data || error.message);
+      
+      // ✅ Handle 409 Conflict - email already exists
+      if (error.response?.status === 409) {
+        throw new Error('User with this email already exists');
+      }
+      
+      // ✅ Handle 500 error (noted in API contract)
+      if (error.response?.status === 500) {
+        throw new Error('Server error during registration. Please try again or contact support.');
+      }
+      
+      throw new Error(error.response?.data?.error || error.message || 'Registration failed');
+    }
+  },
+
+  async logout(): Promise<void> {
+    try {
+      console.log('🚪 Clearing auth data...');
+      
+      // ✅ Clear stored data
+      await AsyncStorage.multiRemove([AUTH_TOKEN_KEY, USER_DATA_KEY]);
+      
+      console.log('✅ Auth data cleared');
+    } catch (error) {
+      console.error('❌ Logout error:', error);
+      // Force clear even on error
+      await AsyncStorage.multiRemove([AUTH_TOKEN_KEY, USER_DATA_KEY]);
+    }
+  },
+
+  async isAuthenticated(): Promise<boolean> {
+    try {
+      const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+      const hasToken = !!token;
+      console.log('🔍 Has token:', hasToken);
+      return hasToken;
+    } catch (error) {
+      console.error('❌ Auth check error:', error);
+      return false;
+    }
+  },
+
+  async getCurrentUser(): Promise<any> {
+    try {
+      const userData = await AsyncStorage.getItem(USER_DATA_KEY);
+      if (userData) {
+        const user = JSON.parse(userData);
+        console.log('👤 Retrieved user:', user);
+        return user;
+      }
+      console.log('👤 No user data found');
+      return null;
+    } catch (error) {
+      console.error('❌ Get user error:', error);
+      return null;
+    }
+  },
+
+  async getToken(): Promise<string | null> {
+    try {
+      const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+      return token;
+    } catch (error) {
+      console.error('❌ Get token error:', error);
+      return null;
+    }
+  },
+
+  // ✅ Check if organization exists by name
+  // API: POST /auth/check-org-name?name={org_name}
+  // Returns: { exists: boolean, organization: {...} | null }
+  async checkOrgName(orgName: string): Promise<OrgNameCheckResponse> {
+    try {
+      const response = await apiClient.post(
+        `${API_ENDPOINTS.CHECK_ORG_NAME}?name=${encodeURIComponent(orgName)}`
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Check org name error:', error.response?.data || error.message);
+      
+      // ✅ 404 means organization doesn't exist (available)
+      if (error.response?.status === 404) {
+        return { exists: false, organization: null };
+      }
+      
+      // ✅ 500 error noted in API contract
+      if (error.response?.status === 500) {
+        throw new Error('Server error checking organization name. Please try again.');
+      }
+      
+      throw new Error(error.response?.data?.message || 'Failed to check organization name');
+    }
+  },
+
+  // ✅ Get list of all organizations
+  // API: GET /auth/orgs-list
+  // Returns: Array of organizations
+  async getOrgsList(): Promise<Organization[]> {
+    try {
+      const response = await apiClient.get(API_ENDPOINTS.ORGS_LIST);
+      
+      // ✅ API returns array directly (not wrapped in .organizations)
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Get orgs list error:', error.response?.data || error.message);
+      throw new Error(error.response?.data?.message || 'Failed to fetch organizations');
+    }
+  },
+
+  // ✅ Clear all auth data (for debugging)
+  async clearAllAuthData(): Promise<void> {
+    try {
+      await AsyncStorage.multiRemove([AUTH_TOKEN_KEY, USER_DATA_KEY]);
+      console.log('✅ All auth data cleared');
+    } catch (error) {
+      console.error('❌ Clear auth data error:', error);
+    }
+  },
+};
+
+export default authService;

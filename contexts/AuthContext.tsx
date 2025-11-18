@@ -1,11 +1,12 @@
+// File: contexts/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { router } from 'expo-router';
 import authService from '@/services/api/authService';
 
 interface User {
   id: string;
   email: string;
   name: string;
-  // Add other user properties as needed
 }
 
 interface AuthContextType {
@@ -29,47 +30,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const checkAuthStatus = async () => {
     try {
+      console.log('🔍 Checking auth status...');
       const authenticated = await authService.isAuthenticated();
+      console.log('✅ Is authenticated:', authenticated);
+      
       if (authenticated) {
-        // Fetch user data if authenticated
         const userData = await authService.getCurrentUser();
+        console.log('👤 User data:', userData);
         setUser(userData);
+      } else {
+        console.log('❌ Not authenticated');
+        setUser(null);
       }
     } catch (error) {
-      console.error('Auth check error:', error);
+      console.error('❌ Auth check error:', error);
       setUser(null);
     } finally {
       setLoading(false);
+      console.log('✅ Auth check complete');
     }
   };
 
   const signIn = async (email: string, password: string) => {
     try {
+      console.log('🔐 Signing in...');
       const response = await authService.login({ email, password });
+      console.log('✅ Login successful');
       setUser(response.user);
+      router.replace('/(tabs)');
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('❌ Login error:', error);
       throw error;
     }
   };
 
   const signUp = async (email: string, password: string, name: string) => {
     try {
+      console.log('📝 Signing up...');
       const response = await authService.register({ email, password, name });
+      console.log('✅ Registration successful');
       setUser(response.user);
+      router.replace('/(tabs)');
     } catch (error) {
-      console.error('Registration error:', error);
+      console.error('❌ Registration error:', error);
       throw error;
     }
   };
 
   const signOut = async () => {
     try {
+      console.log('🚪 Signing out...');
       await authService.logout();
       setUser(null);
+      router.replace('/(auth)/login');
+      console.log('✅ Logout successful');
     } catch (error) {
-      console.error('Logout error:', error);
-      throw error;
+      console.error('❌ Logout error:', error);
+      setUser(null);
+      router.replace('/(auth)/login');
     }
   };
 

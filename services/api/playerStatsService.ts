@@ -1,12 +1,12 @@
 // File: services/api/playerStatsService.ts
 import apiClient from './client';
-import { API_ENDPOINTS } from '@/config/api';
+import { API_ENDPOINTS, withRetry } from '@/config/api';
 import { PlayerStats } from './playerService';
 import offlineApiService from './offlineApiService';
 
 class PlayerStatsService {
   /**
-   * Get player stats with offline support
+   * Get player stats with offline support and retry
    */
   async getPlayerStats(filters?: {
     video_id?: string;
@@ -23,8 +23,10 @@ class PlayerStatsService {
     
     return offlineApiService.fetchWithCache(
       async () => {
-        const response = await apiClient.get(API_ENDPOINTS.PLAYER_STATS, { params: filters });
-        return response.data;
+        return withRetry(async () => {
+          const response = await apiClient.get(API_ENDPOINTS.PLAYER_STATS, { params: filters });
+          return response.data;
+        });
       },
       { 
         key: cacheKey,
@@ -34,15 +36,17 @@ class PlayerStatsService {
   }
 
   /**
-   * Get player stats by video with offline support
+   * Get player stats by video with offline support and retry
    */
   async getPlayerStatsByVideo(videoId: string): Promise<any[]> {
     const cacheKey = `player_stats_video_${videoId}`;
     
     return offlineApiService.fetchWithCache(
       async () => {
-        const response = await apiClient.get(API_ENDPOINTS.PLAYER_STATS_BY_VIDEO(videoId));
-        return response.data;
+        return withRetry(async () => {
+          const response = await apiClient.get(API_ENDPOINTS.PLAYER_STATS_BY_VIDEO(videoId));
+          return response.data;
+        });
       },
       { 
         key: cacheKey,
@@ -52,15 +56,17 @@ class PlayerStatsService {
   }
 
   /**
-   * Get player stats by player with offline support
+   * Get player stats by player with offline support and retry
    */
   async getPlayerStatsByPlayer(playerId: string): Promise<any[]> {
     const cacheKey = `player_stats_player_${playerId}`;
     
     return offlineApiService.fetchWithCache(
       async () => {
-        const response = await apiClient.get(API_ENDPOINTS.PLAYER_STATS_BY_PLAYER(playerId));
-        return response.data;
+        return withRetry(async () => {
+          const response = await apiClient.get(API_ENDPOINTS.PLAYER_STATS_BY_PLAYER(playerId));
+          return response.data;
+        });
       },
       { 
         key: cacheKey,
@@ -70,15 +76,17 @@ class PlayerStatsService {
   }
 
   /**
-   * Get player stats by team with offline support
+   * Get player stats by team with offline support and retry
    */
   async getPlayerStatsByTeam(teamId: string): Promise<any[]> {
     const cacheKey = `player_stats_team_${teamId}`;
     
     return offlineApiService.fetchWithCache(
       async () => {
-        const response = await apiClient.get(API_ENDPOINTS.PLAYER_STATS_BY_TEAM(teamId));
-        return response.data;
+        return withRetry(async () => {
+          const response = await apiClient.get(API_ENDPOINTS.PLAYER_STATS_BY_TEAM(teamId));
+          return response.data;
+        });
       },
       { 
         key: cacheKey,
@@ -88,15 +96,17 @@ class PlayerStatsService {
   }
 
   /**
-   * Get team totals with offline support
+   * Get team totals with offline support and retry
    */
   async getTeamTotals(teamId: string, videoId: string): Promise<any> {
     const cacheKey = `team_totals_${teamId}_${videoId}`;
     
     return offlineApiService.fetchWithCache(
       async () => {
-        const response = await apiClient.get(`${API_ENDPOINTS.TEAM_TOTALS(teamId)}?video_id=${videoId}`);
-        return response.data;
+        return withRetry(async () => {
+          const response = await apiClient.get(`${API_ENDPOINTS.TEAM_TOTALS(teamId)}?video_id=${videoId}`);
+          return response.data;
+        });
       },
       { 
         key: cacheKey,
@@ -106,11 +116,13 @@ class PlayerStatsService {
   }
 
   /**
-   * Create player stat
+   * Create player stat with retry
    * Note: Clears related caches after creation
    */
   async createPlayerStat(data: PlayerStats & { video_id: string; player_id: string }): Promise<void> {
-    await apiClient.post(API_ENDPOINTS.PLAYER_STATS, data);
+    await withRetry(async () => {
+      await apiClient.post(API_ENDPOINTS.PLAYER_STATS, data);
+    });
     
     // Clear related caches
     await offlineApiService.clearCache(`player_stats_video_${data.video_id}`);
@@ -125,11 +137,21 @@ class PlayerStatsService {
   }
 
   /**
-   * Create bulk player stats
+   * Create bulk player stats with retry
    * Note: Clears all stats caches after bulk creation
    */
   async createBulkPlayerStats(stats: any[]): Promise<void> {
-    await apiClient.post(`${API_ENDPOINTS.PLAYER_STATS}/bulk`, stats);
+    await withRetry(
+      async () => {
+        await apiClient.post(`${API_ENDPOINTS.PLAYER_STATS}/bulk`, stats);
+      },
+      {
+        maxRetries: 5, // More retries for bulk operations
+        onRetry: (attemptNumber) => {
+          console.log(`🔄 Retrying bulk stats creation... Attempt ${attemptNumber}`);
+        }
+      }
+    );
     
     // Clear all stats-related caches since we don't know which players/videos/teams were affected
     const cachedKeys = await offlineApiService.getCachedKeys();

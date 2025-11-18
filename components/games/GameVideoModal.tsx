@@ -2,8 +2,8 @@
 import React from 'react';
 import { View, Text, Modal, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import VideoPlayer from '@/components/ui/videoPlayer';
-import Card from '@/components/ui/card';
+import VideoPlayer from '@/components/ui/VideoPlayer';
+import Card from '@/components/ui/Card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Spacing, Typography, BorderRadius } from '@/constants/theme';
 
@@ -17,6 +17,9 @@ interface GameVideoModalProps {
     tags: any[];
   };
   currentColors: any;
+  // ✅ NEW: Accessibility props
+  modalAccessibilityLabel?: string;
+  closeButtonAccessibilityLabel?: string;
 }
 
 export default function GameVideoModal({
@@ -25,6 +28,8 @@ export default function GameVideoModal({
   game,
   videoData,
   currentColors,
+  modalAccessibilityLabel,
+  closeButtonAccessibilityLabel,
 }: GameVideoModalProps) {
   if (!game) return null;
 
@@ -34,12 +39,23 @@ export default function GameVideoModal({
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={onClose}
+      // ✅ ADD: Modal accessibility
+      accessibilityViewIsModal={true}
     >
-      <SafeAreaView style={[styles.container, { backgroundColor: currentColors.background }]}>
+      <SafeAreaView 
+        style={[styles.container, { backgroundColor: currentColors.background }]}
+        // ✅ ADD: Screen accessibility
+        accessible={true}
+        accessibilityLabel={modalAccessibilityLabel || `Game highlights modal for ${game.homeTeam.name} versus ${game.awayTeam.name}`}
+      >
         <View style={[styles.header, { backgroundColor: currentColors.surface }]}>
           <TouchableOpacity
             onPress={onClose}
             style={[styles.closeButton, { backgroundColor: currentColors.border }]}
+            // ✅ ADD: Close button accessibility
+            accessibilityRole="button"
+            accessibilityLabel={closeButtonAccessibilityLabel || "Close game highlights"}
+            accessibilityHint="Closes the modal and returns to games list"
           >
             <IconSymbol name="xmark" size={24} color={currentColors.text} />
           </TouchableOpacity>
@@ -49,7 +65,11 @@ export default function GameVideoModal({
           <View style={styles.closeButtonPlaceholder} />
         </View>
 
-        <ScrollView style={styles.content}>
+        <ScrollView 
+          style={styles.content}
+          // ✅ ADD: ScrollView accessibility
+          accessibilityLabel="Game highlights content"
+        >
           <View style={styles.videoPlayerContainer}>
             <VideoPlayer
               videoUrl={videoData.videoUrl}
@@ -59,7 +79,15 @@ export default function GameVideoModal({
             />
           </View>
 
-          <Card variant="elevated" padding="large" style={styles.gameSummary}>
+          <Card 
+            variant="elevated" 
+            padding="large" 
+            style={styles.gameSummary}
+            // ✅ ADD: Card accessibility
+            accessible={true}
+            accessibilityRole="summary"
+            accessibilityLabel={`Game summary: ${game.homeTeam.name} ${game.score.home}, ${game.awayTeam.name} ${game.score.away}${game.highlights ? `, ${game.highlights.length} key moments identified` : ''}`}
+          >
             <View style={styles.summaryHeader}>
               <IconSymbol name="chart.bar.fill" size={24} color={currentColors.primary} />
               <Text style={[styles.gameTitle, { color: currentColors.text }]}>
@@ -68,7 +96,10 @@ export default function GameVideoModal({
             </View>
 
             <View style={styles.gameInfo}>
-              <View style={styles.scoreRow}>
+              <View 
+                style={styles.scoreRow}
+                accessible={false} // Parent card handles accessibility
+              >
                 <Text style={[styles.team, { color: currentColors.text }]}>
                   {game.homeTeam.name}
                 </Text>
@@ -81,7 +112,10 @@ export default function GameVideoModal({
               </View>
 
               {game.highlights && (
-                <View style={[styles.keyMomentsBadge, { backgroundColor: currentColors.surface }]}>
+                <View 
+                  style={[styles.keyMomentsBadge, { backgroundColor: currentColors.surface }]}
+                  accessible={false} // Parent card handles accessibility
+                >
                   <IconSymbol name="star.fill" size={16} color={currentColors.primary} />
                   <Text style={[styles.keyMomentsText, { color: currentColors.text }]}>
                     {game.highlights.length} Key Moments Identified

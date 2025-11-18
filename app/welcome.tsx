@@ -1,13 +1,13 @@
-import Button from '@/components/ui/button';
-import Card from '@/components/ui/card';
+import Button from '@/components/ui/Button';
+import Card from '@/components/ui/Card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import PlayerAvatar from '@/components/ui/playerAvatar';
+import PlayerAvatar from '@/components/ui/PlayerAvatar';
 import { BorderRadius, Colors, DarkColors, Layout, Spacing, Typography, Shadows, Gradients, Animation } from '@/constants/theme';
-import { mockCoach, onboardingSteps } from '@/data/mockData';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTheme } from '@/contexts/ThemeContext';
 import { router } from 'expo-router';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -16,38 +16,70 @@ import {
   View,
   Pressable,
   Dimensions,
+  TouchableOpacity,
 } from 'react-native';
 import Animated, {
   FadeIn,
   FadeInDown,
   FadeInUp,
   SlideInRight,
-  SlideInLeft,
   ZoomIn,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
   withRepeat,
   withSequence,
-  withDelay,
   withTiming,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import userService from '@/services/api/userService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 const { width } = Dimensions.get('window');
 
+const onboardingSteps = [
+  {
+    id: 'step1',
+    title: 'Create Your Team',
+    description: 'Set up your roster and manage player information in one place',
+  },
+  {
+    id: 'step2',
+    title: 'Upload Game Videos',
+    description: 'Upload game footage for AI-powered analysis and insights',
+  },
+  {
+    id: 'step3',
+    title: 'Track Performance',
+    description: 'Monitor player stats, team metrics, and development progress',
+  },
+  {
+    id: 'step4',
+    title: 'Get AI Insights',
+    description: 'Receive personalized coaching recommendations and strategies',
+  },
+];
+
+interface Coach {
+  id: string;
+  name: string;
+  imageUri?: string;
+  email: string;
+}
+
 export default function WelcomeScreen() {
   const { isTablet, isLandscape } = useResponsive();
-  const theme = useColorScheme() ?? 'light';
-  const isDark = theme === 'dark';
-  const currentColors = isDark ? DarkColors : Colors;
+  const { currentColors, isDark } = useTheme();
+  const [coach, setCoach] = useState<Coach | null>(null);
 
   const scale = useSharedValue(1);
   const floatY = useSharedValue(0);
 
   useEffect(() => {
+    loadCoachProfile();
+    
     // Floating animation for the illustration
     floatY.value = withRepeat(
       withSequence(
@@ -59,12 +91,48 @@ export default function WelcomeScreen() {
     );
   }, []);
 
-  const handleGetStarted = () => {
+  const loadCoachProfile = async () => {
+    try {
+      const profile = await userService.getProfile();
+      setCoach({
+        id: profile.id,
+        name: profile.name || profile.email,
+        email: profile.email,
+        imageUri: profile.avatar_url,
+      });
+    } catch (err) {
+      console.error('Failed to load coach profile:', err);
+      setCoach({
+        id: 'default',
+        name: 'Coach',
+        email: 'coach@athloscore.com',
+      });
+    }
+  };
+
+  const handleGetStarted = async () => {
+    // Mark welcome as seen
+    await AsyncStorage.setItem('welcome_seen', 'true');
+    // Go to interactive tutorial
+    router.push('/tutorial');
+  };
+
+  const handleSkipTutorial = async () => {
+    // Mark welcome and tutorial as complete
+    await AsyncStorage.setItem('welcome_seen', 'true');
+    await AsyncStorage.setItem('tutorial_completed', 'true');
+    // Skip and go directly to app
     router.push('/(tabs)');
   };
 
-  const handleSkipTutorial = () => {
-    router.push('/(tabs)');
+  const handleQuickStart = () => {
+    // Open tutorial screen
+    router.push('/tutorial');
+  };
+
+  const handleViewHelp = () => {
+    // Open help & FAQ screen
+    router.push('/help');
   };
 
   const handlePressIn = () => {
@@ -126,29 +194,31 @@ export default function WelcomeScreen() {
             </Animated.View>
 
             {/* Coach Info with Blur */}
-            <Animated.View 
-              entering={FadeIn.delay(400).duration(600)}
-              style={styles.coachContainer}
-            >
-              <BlurView intensity={20} tint={isDark ? 'dark' : 'light'} style={styles.coachBlur}>
-                <PlayerAvatar
-                  name={mockCoach.name}
-                  imageUri={mockCoach.imageUri}
-                  size="medium"
-                  variant="gradient"
-                  showJerseyNumber={false}
-                  online
-                />
-                <View style={styles.coachTextContainer}>
-                  <Text style={[styles.coachLabel, { color: currentColors.textLight }]}>
-                    Your Coach
-                  </Text>
-                  <Text style={[styles.coachName, { color: currentColors.text }]}>
-                    {mockCoach.name}
-                  </Text>
-                </View>
-              </BlurView>
-            </Animated.View>
+            {coach && (
+              <Animated.View 
+                entering={FadeIn.delay(400).duration(600)}
+                style={styles.coachContainer}
+              >
+                <BlurView intensity={20} tint={isDark ? 'dark' : 'light'} style={styles.coachBlur}>
+                  <PlayerAvatar
+                    name={coach.name}
+                    imageUri={coach.imageUri}
+                    size="medium"
+                    variant="gradient"
+                    showJerseyNumber={false}
+                    online
+                  />
+                  <View style={styles.coachTextContainer}>
+                    <Text style={[styles.coachLabel, { color: currentColors.textLight }]}>
+                      Your Coach
+                    </Text>
+                    <Text style={[styles.coachName, { color: currentColors.text }]}>
+                      {coach.name}
+                    </Text>
+                  </View>
+                </BlurView>
+              </Animated.View>
+            )}
           </View>
         </LinearGradient>
       </Animated.View>
@@ -191,8 +261,6 @@ export default function WelcomeScreen() {
                     name="chart.line.uptrend.xyaxis" 
                     size={64} 
                     color={Colors.textOnPrimary}
-                    animated
-                    animationType="pulse"
                   />
                 </LinearGradient>
               </View>
@@ -203,7 +271,7 @@ export default function WelcomeScreen() {
                 entering={FadeIn.delay(1000).duration(600)}
               >
                 <LinearGradient
-                  colors={Gradients.success.colors}
+                  colors={[Colors.success, '#22C55E']}
                   style={styles.badgeGradient}
                 >
                   <IconSymbol name="star.fill" size={16} color={Colors.textOnPrimary} />
@@ -227,15 +295,66 @@ export default function WelcomeScreen() {
           </LinearGradient>
         </Animated.View>
 
+        {/* Quick Start Actions */}
+        <Animated.View entering={FadeInUp.delay(1200).springify()}>
+          <View style={styles.quickStartSection}>
+            <Text style={[styles.sectionTitle, { color: currentColors.text }]}>
+              Quick Start
+            </Text>
+            
+            <View style={styles.quickStartGrid}>
+              <TouchableOpacity
+                onPress={handleQuickStart}
+                activeOpacity={0.7}
+                style={styles.quickStartCard}
+              >
+                <Card variant="elevated_high" padding="large">
+                  <View style={[styles.quickStartIcon, { backgroundColor: currentColors.primary + '20' }]}>
+                    <IconSymbol name="play.circle.fill" size={32} color={currentColors.primary} />
+                  </View>
+                  <Text style={[styles.quickStartTitle, { color: currentColors.text }]}>
+                    Interactive Tutorial
+                  </Text>
+                  <Text style={[styles.quickStartDescription, { color: currentColors.textSecondary }]}>
+                    Step-by-step walkthrough
+                  </Text>
+                </Card>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleViewHelp}
+                activeOpacity={0.7}
+                style={styles.quickStartCard}
+              >
+                <Card variant="elevated_high" padding="large">
+                  <View style={[styles.quickStartIcon, { backgroundColor: Colors.info + '20' }]}>
+                    <IconSymbol name="questionmark.circle.fill" size={32} color={Colors.info} />
+                  </View>
+                  <Text style={[styles.quickStartTitle, { color: currentColors.text }]}>
+                    Help & FAQ
+                  </Text>
+                  <Text style={[styles.quickStartDescription, { color: currentColors.textSecondary }]}>
+                    Find answers quickly
+                  </Text>
+                </Card>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Animated.View>
+
         {/* Feature Steps with Cards */}
         <View style={[
           styles.stepsContainer,
           isTablet && isLandscape && styles.tabletStepsGrid
         ]}>
+          <Text style={[styles.sectionTitle, { color: currentColors.text }]}>
+            How It Works
+          </Text>
+          
           {onboardingSteps.map((step, index) => (
             <Animated.View
               key={step.id}
-              entering={SlideInRight.delay(800 + index * 150).springify()}
+              entering={SlideInRight.delay(1400 + index * 150).springify()}
               style={[
                 styles.stepCard,
                 isTablet && isLandscape && styles.tabletStepItem
@@ -275,7 +394,7 @@ export default function WelcomeScreen() {
                 {/* Progress indicator */}
                 <View style={[styles.progressBar, { backgroundColor: currentColors.border }]}>
                   <Animated.View 
-                    entering={FadeIn.delay(1000 + index * 150).duration(800)}
+                    entering={FadeIn.delay(1600 + index * 150).duration(800)}
                     style={styles.progressBarInner}
                   >
                     <LinearGradient
@@ -293,7 +412,7 @@ export default function WelcomeScreen() {
 
         {/* Quick Stats Grid */}
         <Animated.View 
-          entering={FadeInUp.delay(1400).springify()}
+          entering={FadeInUp.delay(2000).springify()}
           style={styles.statsGrid}
         >
           <View style={styles.statsRow}>
@@ -318,7 +437,7 @@ export default function WelcomeScreen() {
         </Animated.View>
 
         {/* Feature Highlights */}
-        <Animated.View entering={FadeInUp.delay(1600).springify()}>
+        <Animated.View entering={FadeInUp.delay(2200).springify()}>
           <Card variant="gradient" padding="large" style={styles.highlightCard}>
             <View style={styles.highlightHeader}>
               <IconSymbol name="star.fill" size={24} color={Colors.textOnPrimary} />
@@ -334,7 +453,7 @@ export default function WelcomeScreen() {
               ].map((item, index) => (
                 <Animated.View 
                   key={index}
-                  entering={FadeIn.delay(1800 + index * 100).duration(400)}
+                  entering={FadeIn.delay(2400 + index * 100).duration(400)}
                   style={styles.highlightItem}
                 >
                   <IconSymbol name={item.icon} size={20} color={Colors.textOnPrimary} />
@@ -348,7 +467,7 @@ export default function WelcomeScreen() {
 
         {/* Action Buttons */}
         <Animated.View 
-          entering={FadeInUp.delay(2000).springify()}
+          entering={FadeInUp.delay(2600).springify()}
           style={styles.buttonContainer}
         >
           <AnimatedPressable
@@ -358,23 +477,30 @@ export default function WelcomeScreen() {
             onPressOut={handlePressOut}
           >
             <Button
-              title="Get Started"
+              title="Start Tutorial"
               onPress={handleGetStarted}
               variant="primaryGradient"
               size="large"
-              icon={<IconSymbol name="arrow.right" size={20} color={Colors.textOnPrimary} />}
+              icon={<IconSymbol name="play.fill" size={20} color={Colors.textOnPrimary} />}
               iconPosition="right"
               fullWidth
             />
           </AnimatedPressable>
 
           <Button
-            title="Skip Tutorial"
+            title="Skip to Dashboard"
             onPress={handleSkipTutorial}
             variant="ghost"
             size="medium"
             style={styles.skipButton}
           />
+
+          <TouchableOpacity onPress={handleViewHelp} style={styles.helpLink}>
+            <IconSymbol name="questionmark.circle.fill" size={20} color={currentColors.primary} />
+            <Text style={[styles.helpLinkText, { color: currentColors.primary }]}>
+              Need help? Visit Help Center
+            </Text>
+          </TouchableOpacity>
         </Animated.View>
       </ScrollView>
     </SafeAreaView>
@@ -551,6 +677,50 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
+  // Quick Start Section
+  quickStartSection: {
+    paddingHorizontal: Spacing.xl,
+    marginTop: Spacing.xl,
+  },
+
+  quickStartGrid: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+
+  quickStartCard: {
+    flex: 1,
+  },
+
+  quickStartIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginBottom: Spacing.md,
+  },
+
+  quickStartTitle: {
+    fontSize: Typography.callout,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: Spacing.xs,
+  },
+
+  quickStartDescription: {
+    fontSize: Typography.footnote,
+    textAlign: 'center',
+  },
+
+  // Section Title
+  sectionTitle: {
+    fontSize: Typography.headline,
+    fontWeight: '700',
+    marginBottom: Spacing.md,
+  },
+
   // Steps
   stepsContainer: {
     paddingHorizontal: Spacing.xl,
@@ -698,6 +868,19 @@ const styles = StyleSheet.create({
   skipButton: {
     width: '100%',
     maxWidth: 200,
+  },
+
+  helpLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    padding: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+
+  helpLinkText: {
+    fontSize: Typography.callout,
+    fontWeight: '600',
   },
 
   // Responsive

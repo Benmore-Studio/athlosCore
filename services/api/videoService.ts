@@ -1,6 +1,6 @@
 // File: services/api/videoService.ts
 import apiClient from './client';
-import { API_ENDPOINTS } from '@/config/api';
+import { API_ENDPOINTS, withRetry } from '@/config/api';
 import offlineApiService from './offlineApiService';
 
 export interface Video {
@@ -36,7 +36,7 @@ export interface VideoMetadata {
 
 class VideoService {
   /**
-   * Get videos with offline support
+   * Get videos with offline support and retry
    */
   async getVideos(filters?: {
     status?: string;
@@ -47,26 +47,30 @@ class VideoService {
     
     return offlineApiService.fetchWithCache(
       async () => {
-        const response = await apiClient.get(API_ENDPOINTS.VIDEOS, { params: filters });
-        return response.data;
+        return withRetry(async () => {
+          const response = await apiClient.get(API_ENDPOINTS.VIDEOS, { params: filters });
+          return response.data;
+        });
       },
       { 
         key: cacheKey,
-        expiryMs: 30 * 60 * 1000 // 30 minutes cache (videos update frequently)
+        expiryMs: 30 * 60 * 1000 // 30 minutes cache
       }
     );
   }
 
   /**
-   * Get video by ID with offline support
+   * Get video by ID with offline support and retry
    */
   async getVideoById(videoId: string): Promise<Video> {
     const cacheKey = `video_${videoId}`;
     
     return offlineApiService.fetchWithCache(
       async () => {
-        const response = await apiClient.get(API_ENDPOINTS.VIDEO_BY_ID(videoId));
-        return response.data;
+        return withRetry(async () => {
+          const response = await apiClient.get(API_ENDPOINTS.VIDEO_BY_ID(videoId));
+          return response.data;
+        });
       },
       { 
         key: cacheKey,
@@ -76,20 +80,31 @@ class VideoService {
   }
 
   /**
-   * Get upload URL
+   * Get upload URL with retry
    * Note: No caching - always needs fresh signed URL
    */
   async getUploadUrl(fileName: string): Promise<UploadUrlResponse> {
-    const response = await apiClient.post(API_ENDPOINTS.VIDEO_UPLOAD_URL, { file_name: fileName });
-    return response.data;
+    return withRetry(
+      async () => {
+        const response = await apiClient.post(API_ENDPOINTS.VIDEO_UPLOAD_URL, { file_name: fileName });
+        return response.data;
+      },
+      {
+        onRetry: (attemptNumber) => {
+          console.log(`🔄 Retrying upload URL request... Attempt ${attemptNumber}`);
+        }
+      }
+    );
   }
 
   /**
-   * Save video metadata
+   * Save video metadata with retry
    * Note: Clears video list caches after saving
    */
   async saveVideoMetadata(metadata: VideoMetadata): Promise<void> {
-    await apiClient.post(API_ENDPOINTS.VIDEOS, metadata);
+    await withRetry(async () => {
+      await apiClient.post(API_ENDPOINTS.VIDEOS, metadata);
+    });
     
     // Clear video list caches
     await offlineApiService.clearCache(`videos_${metadata.org_id}_all`);
@@ -97,7 +112,7 @@ class VideoService {
   }
 
   /**
-   * Get streaming URL
+   * Get streaming URL with retry
    * Note: Short cache since URLs expire quickly
    */
   async getStreamingUrl(videoId: string): Promise<{ stream_url: string; expires_at: string }> {
@@ -105,18 +120,20 @@ class VideoService {
     
     return offlineApiService.fetchWithCache(
       async () => {
-        const response = await apiClient.get(API_ENDPOINTS.VIDEO_STREAM(videoId));
-        return response.data;
+        return withRetry(async () => {
+          const response = await apiClient.get(API_ENDPOINTS.VIDEO_STREAM(videoId));
+          return response.data;
+        });
       },
       { 
         key: cacheKey,
-        expiryMs: 5 * 60 * 1000 // 5 minutes cache (streaming URLs expire)
+        expiryMs: 5 * 60 * 1000 // 5 minutes cache
       }
     );
   }
 
   /**
-   * Get video status with offline support
+   * Get video status with offline support and retry
    * Note: Short cache since status updates frequently
    */
   async getVideoStatus(videoId: string): Promise<{
@@ -129,22 +146,26 @@ class VideoService {
     
     return offlineApiService.fetchWithCache(
       async () => {
-        const response = await apiClient.get(API_ENDPOINTS.VIDEO_STATUS(videoId));
-        return response.data;
+        return withRetry(async () => {
+          const response = await apiClient.get(API_ENDPOINTS.VIDEO_STATUS(videoId));
+          return response.data;
+        });
       },
       { 
         key: cacheKey,
-        expiryMs: 2 * 60 * 1000 // 2 minutes cache (status changes frequently)
+        expiryMs: 2 * 60 * 1000 // 2 minutes cache
       }
     );
   }
 
   /**
-   * Update video status
+   * Update video status with retry
    * Note: Clears status and video caches after update
    */
   async updateVideoStatus(videoId: string, status: string): Promise<void> {
-    await apiClient.put(API_ENDPOINTS.VIDEO_STATUS(videoId), { status });
+    await withRetry(async () => {
+      await apiClient.put(API_ENDPOINTS.VIDEO_STATUS(videoId), { status });
+    });
     
     // Clear related caches
     await offlineApiService.clearCache(`video_status_${videoId}`);
@@ -159,11 +180,13 @@ class VideoService {
   }
 
   /**
-   * Delete video
+   * Delete video with retry
    * Note: Clears all related caches after deletion
    */
   async deleteVideo(videoId: string): Promise<void> {
-    await apiClient.delete(API_ENDPOINTS.VIDEO_BY_ID(videoId));
+    await withRetry(async () => {
+      await apiClient.delete(API_ENDPOINTS.VIDEO_BY_ID(videoId));
+    });
     
     // Clear video-specific caches
     await offlineApiService.clearCache(`video_${videoId}`);
@@ -179,20 +202,30 @@ class VideoService {
   }
 
   /**
-   * Upload video directly to GCS
+   * Upload video directly to GCS with retry
    * Note: No caching needed - this is a direct upload
    */
   async uploadToGCS(signedUrl: string, fileUri: string): Promise<void> {
     const response = await fetch(fileUri);
     const blob = await response.blob();
 
-    await fetch(signedUrl, {
-      method: 'PUT',
-      body: blob,
-      headers: {
-        'Content-Type': 'video/mp4', // Adjust based on file type
+    await withRetry(
+      async () => {
+        await fetch(signedUrl, {
+          method: 'PUT',
+          body: blob,
+          headers: {
+            'Content-Type': 'video/mp4',
+          },
+        });
       },
-    });
+      {
+        maxRetries: 5, // More retries for large file uploads
+        onRetry: (attemptNumber) => {
+          console.log(`🔄 Retrying video upload... Attempt ${attemptNumber}`);
+        }
+      }
+    );
   }
 }
 

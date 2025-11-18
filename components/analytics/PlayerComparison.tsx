@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Dimensions,
 } from 'react-native';
 import Animated, {
   FadeIn,
@@ -15,9 +14,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import PlayerAvatar from '@/components/ui/playerAvatar';
-import Card from '@/components/ui/card';
-import Button from '@/components/ui/button';
+import PlayerAvatar from '@/components/ui/PlayerAvatar';
+import Card from '@/components/ui/Card';
 import { Colors, Typography, Spacing, BorderRadius, Shadows, Gradients } from '@/constants/theme';
 import { useTheme } from '@/contexts/ThemeContext';
 
@@ -107,7 +105,13 @@ export default function PlayerComparison({
   ];
 
   return (
-    <View style={[styles.container, { backgroundColor: currentColors.background }]}>
+    <View 
+      style={[styles.container, { backgroundColor: currentColors.background }]}
+      // ✅ ADD: Screen-level accessibility
+      accessible={true}
+      accessibilityLabel="Player comparison screen"
+      accessibilityRole="none"
+    >
       {/* Header */}
       <Animated.View entering={FadeInDown.duration(400)}>
         <View style={[styles.header, { backgroundColor: currentColors.cardBackground }]}>
@@ -121,7 +125,7 @@ export default function PlayerComparison({
               >
                 <IconSymbol name="chart.bar.xaxis" size={24} color="#FFFFFF" />
               </LinearGradient>
-              <View>
+              <View accessible={false}>
                 <Text style={[styles.headerTitle, { color: currentColors.text }]}>
                   Compare Players
                 </Text>
@@ -130,21 +134,41 @@ export default function PlayerComparison({
                 </Text>
               </View>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <TouchableOpacity 
+              onPress={onClose} 
+              style={styles.closeButton}
+              // ✅ ADD: Close button accessibility
+              accessibilityRole="button"
+              accessibilityLabel="Close player comparison"
+              accessibilityHint="Returns to previous screen"
+            >
               <IconSymbol name="xmark.circle.fill" size={32} color={currentColors.textSecondary} />
             </TouchableOpacity>
           </View>
         </View>
       </Animated.View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        // ✅ ADD: ScrollView accessibility
+        accessibilityLabel="Player comparison content"
+      >
         {/* Player Selection */}
         <Animated.View entering={FadeIn.delay(200).duration(400)}>
-          <View style={styles.sectionHeader}>
+          <View 
+            style={styles.sectionHeader}
+            accessible={true}
+            accessibilityRole="header"
+            accessibilityLabel={`Select players section. ${selectedPlayers.length} of ${MAX_PLAYERS} players selected`}
+          >
             <Text style={[styles.sectionTitle, { color: currentColors.text }]}>
               Select Players
             </Text>
-            <View style={[styles.counterBadge, { backgroundColor: currentColors.primary }]}>
+            <View 
+              style={[styles.counterBadge, { backgroundColor: currentColors.primary }]}
+              accessible={false}
+            >
               <Text style={styles.counterText}>
                 {selectedPlayers.length}/{MAX_PLAYERS}
               </Text>
@@ -155,11 +179,13 @@ export default function PlayerComparison({
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.playerScroll}
+            accessibilityLabel="Player selection list"
           >
             {players.map((player, index) => {
               const isSelected = selectedPlayers.find(p => p.id === player.id);
               const selectedIndex = selectedPlayers.findIndex(p => p.id === player.id);
               const color = selectedIndex !== -1 ? COMPARISON_COLORS[selectedIndex] : undefined;
+              const isDisabled = !isSelected && selectedPlayers.length >= MAX_PLAYERS;
 
               return (
                 <Animated.View
@@ -168,15 +194,29 @@ export default function PlayerComparison({
                 >
                   <TouchableOpacity
                     onPress={() => handlePlayerSelect(player)}
-                    disabled={!isSelected && selectedPlayers.length >= MAX_PLAYERS}
+                    disabled={isDisabled}
                     activeOpacity={0.8}
+                    // ✅ ADD: Player card accessibility
+                    accessibilityRole="button"
+                    accessibilityLabel={`${player.name}, jersey number ${player.jersey_number}, ${player.position}`}
+                    accessibilityHint={
+                      isSelected 
+                        ? "Double tap to deselect this player" 
+                        : isDisabled
+                        ? "Maximum players selected"
+                        : "Double tap to select this player for comparison"
+                    }
+                    accessibilityState={{ 
+                      selected: !!isSelected,
+                      disabled: isDisabled
+                    }}
                   >
                     <View
                       style={[
                         styles.playerCard,
                         { backgroundColor: currentColors.cardBackground },
                         isSelected && { borderColor: color, borderWidth: 3 },
-                        !isSelected && selectedPlayers.length >= MAX_PLAYERS && styles.playerCardDisabled,
+                        isDisabled && styles.playerCardDisabled,
                       ]}
                     >
                       <PlayerAvatar
@@ -190,7 +230,7 @@ export default function PlayerComparison({
                         style={[
                           styles.playerName,
                           { color: currentColors.text },
-                          !isSelected && selectedPlayers.length >= MAX_PLAYERS && { opacity: 0.4 }
+                          isDisabled && { opacity: 0.4 }
                         ]}
                         numberOfLines={1}
                       >
@@ -200,7 +240,10 @@ export default function PlayerComparison({
                         #{player.jersey_number}
                       </Text>
                       {isSelected && (
-                        <View style={[styles.selectedBadge, { backgroundColor: color }]}>
+                        <View 
+                          style={[styles.selectedBadge, { backgroundColor: color }]}
+                          accessible={false}
+                        >
                           <IconSymbol name="checkmark.circle.fill" size={24} color="#FFFFFF" />
                         </View>
                       )}
@@ -215,17 +258,31 @@ export default function PlayerComparison({
         {/* Comparison Table */}
         {selectedPlayers.length >= 2 && (
           <Animated.View entering={FadeInDown.delay(400).springify()}>
-            <View style={styles.sectionHeader}>
+            <View 
+              style={styles.sectionHeader}
+              accessible={true}
+              accessibilityRole="header"
+              accessibilityLabel="Performance comparison section"
+            >
               <Text style={[styles.sectionTitle, { color: currentColors.text }]}>
                 Performance Comparison
               </Text>
             </View>
 
             {/* Player Headers */}
-            <View style={styles.comparisonHeader}>
+            <View 
+              style={styles.comparisonHeader}
+              accessible={true}
+              accessibilityRole="list"
+              accessibilityLabel={`Comparing ${selectedPlayers.map(p => p.name).join(', ')}`}
+            >
               <View style={styles.metricLabelColumn} />
               {selectedPlayers.map((player, index) => (
-                <View key={player.id} style={styles.playerColumn}>
+                <View 
+                  key={player.id} 
+                  style={styles.playerColumn}
+                  accessible={false}
+                >
                   <View
                     style={[
                       styles.playerHeaderCard,
@@ -251,9 +308,24 @@ export default function PlayerComparison({
             </View>
 
             {/* Stats Rows */}
-            <Card variant="elevated" padding="none" style={styles.comparisonTable}>
+            <Card 
+              variant="elevated" 
+              padding="none" 
+              style={styles.comparisonTable}
+              accessible={true}
+              accessibilityRole="list"
+              accessibilityLabel="Statistics comparison table"
+            >
               {comparisonMetrics.map((metric, metricIndex) => {
                 const maxValue = getMaxValue(metric.key);
+                
+                // ✅ Generate accessibility label for this stat row
+                const statRowLabel = selectedPlayers.map((player, idx) => {
+                  const stats = getPlayerStats(player.id);
+                  let value = stats ? (stats[metric.key] as number) : 0;
+                  const isHighest = value === maxValue && value > 0;
+                  return `${player.name.split(' ')[0]}: ${value} ${metric.label}${isHighest ? ', highest' : ''}`;
+                }).join(', ');
                 
                 return (
                   <Animated.View
@@ -268,6 +340,10 @@ export default function PlayerComparison({
                           borderBottomColor: currentColors.border
                         }
                       ]}
+                      // ✅ ADD: Stat row accessibility
+                      accessible={true}
+                      accessibilityRole="text"
+                      accessibilityLabel={`${metric.label}: ${statRowLabel}`}
                     >
                       {/* Metric Label */}
                       <View style={styles.metricLabelColumn}>
@@ -286,7 +362,6 @@ export default function PlayerComparison({
                         const stats = getPlayerStats(player.id);
                         let value = stats ? (stats[metric.key] as number) : 0;
                         
-                        // Handle percentages
                         if (metric.key === 'field_goals_made' && stats) {
                           value = getFieldGoalPercentage(stats);
                         } else if (metric.key === 'free_throws_made' && stats) {
@@ -298,7 +373,11 @@ export default function PlayerComparison({
                         const isHighest = value === maxValue && value > 0;
 
                         return (
-                          <View key={player.id} style={styles.playerColumn}>
+                          <View 
+                            key={player.id} 
+                            style={styles.playerColumn}
+                            accessible={false}
+                          >
                             <View style={styles.statValueContainer}>
                               <Text
                                 style={[
@@ -341,7 +420,12 @@ export default function PlayerComparison({
 
             {/* Percentage Stats */}
             <Animated.View entering={FadeInDown.delay(800).springify()}>
-              <View style={styles.sectionHeader}>
+              <View 
+                style={styles.sectionHeader}
+                accessible={true}
+                accessibilityRole="header"
+                accessibilityLabel="Shooting percentages section"
+              >
                 <Text style={[styles.sectionTitle, { color: currentColors.text }]}>
                   Shooting Percentages
                 </Text>
@@ -350,7 +434,16 @@ export default function PlayerComparison({
               <Card variant="elevated" padding="large" style={styles.percentageCard}>
                 <View style={styles.percentageGrid}>
                   {/* FG% */}
-                  <View style={styles.percentageSection}>
+                  <View 
+                    style={styles.percentageSection}
+                    accessible={true}
+                    accessibilityRole="text"
+                    accessibilityLabel={`Field goal percentage: ${selectedPlayers.map((player, index) => {
+                      const stats = getPlayerStats(player.id);
+                      const fgPercent = stats ? getFieldGoalPercentage(stats) : 0;
+                      return `${player.name.split(' ')[0]}: ${fgPercent} percent`;
+                    }).join(', ')}`}
+                  >
                     <Text style={[styles.percentageLabel, { color: currentColors.textSecondary }]}>
                       Field Goal %
                     </Text>
@@ -378,7 +471,16 @@ export default function PlayerComparison({
                   </View>
 
                   {/* FT% */}
-                  <View style={styles.percentageSection}>
+                  <View 
+                    style={styles.percentageSection}
+                    accessible={true}
+                    accessibilityRole="text"
+                    accessibilityLabel={`Free throw percentage: ${selectedPlayers.map((player, index) => {
+                      const stats = getPlayerStats(player.id);
+                      const ftPercent = stats ? getFreeThrowPercentage(stats) : 0;
+                      return `${player.name.split(' ')[0]}: ${ftPercent} percent`;
+                    }).join(', ')}`}
+                  >
                     <Text style={[styles.percentageLabel, { color: currentColors.textSecondary }]}>
                       Free Throw %
                     </Text>
@@ -413,7 +515,14 @@ export default function PlayerComparison({
         {/* Empty State */}
         {selectedPlayers.length < 2 && (
           <Animated.View entering={FadeIn.delay(300).duration(400)}>
-            <Card variant="elevated" padding="large" style={styles.emptyCard}>
+            <Card 
+              variant="elevated" 
+              padding="large" 
+              style={styles.emptyCard}
+              accessible={true}
+              accessibilityRole="text"
+              accessibilityLabel="Select at least 2 players. Choose players from the list above to compare their performance side-by-side"
+            >
               <IconSymbol name="person.2.fill" size={48} color={currentColors.textLight} />
               <Text style={[styles.emptyTitle, { color: currentColors.text }]}>
                 Select at least 2 players

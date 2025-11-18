@@ -1,10 +1,9 @@
-// File: components/dashboard/PlayerSpotlight.tsx
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Animated, { FadeIn, SlideInRight } from 'react-native-reanimated';
-import Card from '@/components/ui/card';
+import Card from '@/components/ui/Card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import PlayerAvatar from '@/components/ui/playerAvatar';
+import PlayerAvatar from '@/components/ui/PlayerAvatar';
 import { Spacing, Typography, BorderRadius } from '@/constants/theme';
 
 interface Player {
@@ -17,6 +16,9 @@ interface Player {
     rebounds: number;
     assists: number;
   };
+  // ✅ NEW: Accessibility props
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
 }
 
 interface PlayerSpotlightProps {
@@ -24,15 +26,39 @@ interface PlayerSpotlightProps {
   onSeeAll: () => void;
   onPlayerPress: () => void;
   currentColors: any;
+  // ✅ NEW: Section accessibility
+  sectionAccessibilityLabel?: string;
+  seeAllAccessibilityLabel?: string;
+  seeAllAccessibilityHint?: string;
 }
 
-export default function PlayerSpotlight({ players, onSeeAll, onPlayerPress, currentColors }: PlayerSpotlightProps) {
+export default function PlayerSpotlight({ 
+  players, 
+  onSeeAll, 
+  onPlayerPress, 
+  currentColors,
+  sectionAccessibilityLabel,
+  seeAllAccessibilityLabel,
+  seeAllAccessibilityHint,
+}: PlayerSpotlightProps) {
   return (
-    <Animated.View entering={SlideInRight.delay(1800).springify()} style={styles.container}>
+    <Animated.View 
+      entering={SlideInRight.delay(1800).springify()} 
+      style={styles.container}
+      accessible={true}
+      accessibilityRole="list"
+      accessibilityLabel={sectionAccessibilityLabel || "Player spotlight section"}
+    >
       <Card variant="elevated" padding="large">
         <View style={styles.header}>
           <Text style={[styles.title, { color: currentColors.text }]}>Player Spotlight</Text>
-          <TouchableOpacity onPress={onSeeAll}>
+          <TouchableOpacity 
+            onPress={onSeeAll}
+            // ✅ ADD: See all button accessibility
+            accessibilityRole="button"
+            accessibilityLabel={seeAllAccessibilityLabel || "See all players"}
+            accessibilityHint={seeAllAccessibilityHint || "View complete team roster"}
+          >
             <Text style={[styles.seeAll, { color: currentColors.primary }]}>All Players</Text>
           </TouchableOpacity>
         </View>
@@ -44,6 +70,16 @@ export default function PlayerSpotlight({ players, onSeeAll, onPlayerPress, curr
                 style={[styles.item, { backgroundColor: currentColors.surface }]}
                 activeOpacity={0.7}
                 onPress={onPlayerPress}
+                // ✅ ADD: Player card accessibility
+                accessibilityRole="button"
+                accessibilityLabel={
+                  player.accessibilityLabel || 
+                  `${player.name}, jersey number ${player.jerseyNumber}, top scorer. Stats: ${player.stats.points} points, ${player.stats.rebounds} rebounds, ${player.stats.assists} assists per game`
+                }
+                accessibilityHint={
+                  player.accessibilityHint || 
+                  "Tap to view detailed player profile and statistics"
+                }
               >
                 <PlayerAvatar
                   name={player.name}
@@ -55,14 +91,19 @@ export default function PlayerSpotlight({ players, onSeeAll, onPlayerPress, curr
                 
                 <View style={styles.info}>
                   <Text style={[styles.name, { color: currentColors.text }]}>{player.name}</Text>
-                  <View style={[styles.badge, { backgroundColor: currentColors.primary }]}>
+                  <View 
+                    style={[styles.badge, { backgroundColor: currentColors.primary }]}
+                    accessible={false} // Let parent handle accessibility
+                  >
                     <Text style={styles.role}>TOP SCORER</Text>
                   </View>
-                  <Text style={[styles.stats, { color: currentColors.textSecondary }]}>
+                  <Text 
+                    style={[styles.stats, { color: currentColors.textSecondary }]}
+                    accessible={false} // Let parent handle accessibility
+                  >
                     {player.stats.points}P • {player.stats.rebounds}R • {player.stats.assists}A
                   </Text>
                 </View>
-
                 <IconSymbol name="chevron.right" size={20} color={currentColors.textLight} />
               </TouchableOpacity>
             </Animated.View>

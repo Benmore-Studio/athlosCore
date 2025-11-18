@@ -1,6 +1,6 @@
 // File: services/api/teamService.ts
 import apiClient from './client';
-import { API_ENDPOINTS } from '@/config/api';
+import { API_ENDPOINTS, withRetry } from '@/config/api';
 import offlineApiService from './offlineApiService';
 
 export interface Team {
@@ -14,7 +14,7 @@ export interface Team {
 
 class TeamService {
   /**
-   * Get teams with offline support
+   * Get teams with offline support and retry
    */
   async getTeams(filters?: {
     video_id?: string;
@@ -26,8 +26,10 @@ class TeamService {
     
     return offlineApiService.fetchWithCache(
       async () => {
-        const response = await apiClient.get(API_ENDPOINTS.TEAMS, { params: filters });
-        return response.data;
+        return withRetry(async () => {
+          const response = await apiClient.get(API_ENDPOINTS.TEAMS, { params: filters });
+          return response.data;
+        });
       },
       { 
         key: cacheKey,
@@ -37,15 +39,17 @@ class TeamService {
   }
 
   /**
-   * Get team by ID with offline support
+   * Get team by ID with offline support and retry
    */
   async getTeamById(teamId: string): Promise<Team> {
     const cacheKey = `team_${teamId}`;
     
     return offlineApiService.fetchWithCache(
       async () => {
-        const response = await apiClient.get(API_ENDPOINTS.TEAM_BY_ID(teamId));
-        return response.data;
+        return withRetry(async () => {
+          const response = await apiClient.get(API_ENDPOINTS.TEAM_BY_ID(teamId));
+          return response.data;
+        });
       },
       { 
         key: cacheKey,
@@ -55,7 +59,7 @@ class TeamService {
   }
 
   /**
-   * Create team
+   * Create team with retry
    * Note: Clears relevant caches after creation
    */
   async createTeam(data: {
@@ -64,7 +68,9 @@ class TeamService {
     model_team_identifier: string;
     name?: string;
   }): Promise<void> {
-    await apiClient.post(API_ENDPOINTS.TEAMS, data);
+    await withRetry(async () => {
+      await apiClient.post(API_ENDPOINTS.TEAMS, data);
+    });
     
     // Clear relevant caches
     await offlineApiService.clearCache(`teams_${data.video_id}_1`);
@@ -72,11 +78,13 @@ class TeamService {
   }
 
   /**
-   * Update team
+   * Update team with retry
    * Note: Clears relevant caches after update
    */
   async updateTeam(teamId: string, data: { name?: string }): Promise<void> {
-    await apiClient.put(API_ENDPOINTS.TEAM_BY_ID(teamId), data);
+    await withRetry(async () => {
+      await apiClient.put(API_ENDPOINTS.TEAM_BY_ID(teamId), data);
+    });
     
     // Clear team-specific cache
     await offlineApiService.clearCache(`team_${teamId}`);
@@ -90,11 +98,13 @@ class TeamService {
   }
 
   /**
-   * Delete team
+   * Delete team with retry
    * Note: Clears relevant caches after deletion
    */
   async deleteTeam(teamId: string): Promise<void> {
-    await apiClient.delete(API_ENDPOINTS.TEAM_BY_ID(teamId));
+    await withRetry(async () => {
+      await apiClient.delete(API_ENDPOINTS.TEAM_BY_ID(teamId));
+    });
     
     // Clear team-specific cache
     await offlineApiService.clearCache(`team_${teamId}`);

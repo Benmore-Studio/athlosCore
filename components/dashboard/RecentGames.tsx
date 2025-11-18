@@ -1,11 +1,10 @@
-// File: components/dashboard/RecentGames.tsx
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
-import Card from '@/components/ui/card';
-import Button from '@/components/ui/button';
+import Card from '@/components/ui/Card';
+import Button from '@/components/ui/Button';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { useTheme } from '@/contexts/ThemeContext'; // ✅ Added: Import theme context
+import { useTheme } from '@/contexts/ThemeContext';
 import { Spacing, Typography, BorderRadius } from '@/constants/theme';
 
 interface Game {
@@ -14,6 +13,9 @@ interface Game {
   score: string;
   date: string;
   win: boolean;
+  // ✅ NEW: Accessibility props
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
 }
 
 interface RecentGamesProps {
@@ -22,7 +24,11 @@ interface RecentGamesProps {
   onGamePress: () => void;
   onCategoryPress: () => void;
   onWatchFilm: () => void;
-  currentColors?: any; // ✅ Changed: Made optional
+  currentColors?: any;
+  // ✅ NEW: Section accessibility
+  sectionAccessibilityLabel?: string;
+  seeAllAccessibilityLabel?: string;
+  seeAllAccessibilityHint?: string;
 }
 
 export default function RecentGames({ 
@@ -31,16 +37,35 @@ export default function RecentGames({
   onGamePress, 
   onCategoryPress, 
   onWatchFilm, 
-  currentColors: propsColors 
+  currentColors: propsColors,
+  sectionAccessibilityLabel,
+  seeAllAccessibilityLabel,
+  seeAllAccessibilityHint,
 }: RecentGamesProps) {
-  const { currentColors: contextColors } = useTheme(); // ✅ Added: Get colors from theme context
-  const currentColors = propsColors || contextColors; // ✅ Added: Use props if provided, otherwise use context
+  const { currentColors: contextColors } = useTheme();
+  const currentColors = propsColors || contextColors;
+
+  const categories = [
+    { label: 'Offensive Sets', accessibilityLabel: 'View offensive sets highlights' },
+    { label: 'Defensive Stops', accessibilityLabel: 'View defensive stops highlights' },
+    { label: 'Key Plays', accessibilityLabel: 'View key plays highlights' },
+  ];
 
   return (
-    <Animated.View entering={FadeInUp.delay(1400).springify()}>
+    <Animated.View 
+      entering={FadeInUp.delay(1400).springify()}
+      accessible={true}
+      accessibilityRole="list"
+      accessibilityLabel={sectionAccessibilityLabel || "Recent games section"}
+    >
       <View style={styles.header}>
         <Text style={[styles.title, { color: currentColors.text }]}>Recent Games</Text>
-        <TouchableOpacity onPress={onSeeAll}>
+        <TouchableOpacity 
+          onPress={onSeeAll}
+          accessibilityRole="button"
+          accessibilityLabel={seeAllAccessibilityLabel || "See all games"}
+          accessibilityHint={seeAllAccessibilityHint || "View complete game history"}
+        >
           <Text style={[styles.seeAll, { color: currentColors.primary }]}>See All</Text>
         </TouchableOpacity>
       </View>
@@ -48,7 +73,18 @@ export default function RecentGames({
       <Card variant="elevated" padding="large" style={styles.card}>
         {games.map((game, index) => (
           <Animated.View key={index} entering={FadeIn.delay(1500 + index * 100).duration(400)}>
-            <TouchableOpacity style={styles.gameItem} activeOpacity={0.7} onPress={onGamePress}>
+            <TouchableOpacity 
+              style={styles.gameItem} 
+              activeOpacity={0.7} 
+              onPress={onGamePress}
+              // ✅ ADD: Game card accessibility
+              accessibilityRole="button"
+              accessibilityLabel={
+                game.accessibilityLabel || 
+                `${game.win ? 'Win' : 'Loss'} against ${game.away}, ${game.date}, final score ${game.score.replace('-', ' to ')}`
+              }
+              accessibilityHint={game.accessibilityHint || "Tap to view game details and statistics"}
+            >
               <View style={styles.gameContent}>
                 <View style={[
                   styles.indicator,
@@ -75,10 +111,15 @@ export default function RecentGames({
           </Animated.View>
         ))}
 
-        <View style={styles.highlights}>
+        <View 
+          style={styles.highlights}
+          accessible={true}
+          accessibilityRole="menu"
+          accessibilityLabel="Film highlights categories"
+        >
           <Text style={[styles.highlightsTitle, { color: currentColors.text }]}>Film Highlights</Text>
           <View style={styles.categories}>
-            {['Offensive Sets', 'Defensive Stops', 'Key Plays'].map((category, index) => (
+            {categories.map((category, index) => (
               <Animated.View key={index} entering={FadeIn.delay(1700 + index * 100).duration(400)}>
                 <TouchableOpacity 
                   style={[
@@ -86,8 +127,12 @@ export default function RecentGames({
                     { backgroundColor: currentColors.surface, borderColor: currentColors.border }
                   ]}
                   onPress={onCategoryPress}
+                  // ✅ ADD: Category accessibility
+                  accessibilityRole="button"
+                  accessibilityLabel={category.accessibilityLabel}
+                  accessibilityHint="Opens filtered highlights for this category"
                 >
-                  <Text style={[styles.categoryLabel, { color: currentColors.text }]}>{category}</Text>
+                  <Text style={[styles.categoryLabel, { color: currentColors.text }]}>{category.label}</Text>
                 </TouchableOpacity>
               </Animated.View>
             ))}
@@ -99,6 +144,9 @@ export default function RecentGames({
             variant="primaryGradient"
             icon={<IconSymbol name="play.fill" size={18} color={'black'} />}
             fullWidth
+            // ✅ ADD: Button accessibility (uses enhanced Button component)
+            accessibilityLabel="Watch full game film"
+            accessibilityHint="Opens the complete game recording with all plays"
           />
         </View>
       </Card>
@@ -134,7 +182,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.05)', // ✅ Changed: Made dynamic-friendly
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
   },
   indicator: {
     width: 4,
@@ -169,7 +217,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.lg,
     paddingTop: Spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0, 0, 0, 0.05)', // ✅ Changed: Made dynamic-friendly
+    borderTopColor: 'rgba(0, 0, 0, 0.05)',
   },
   highlightsTitle: {
     fontSize: Typography.body,

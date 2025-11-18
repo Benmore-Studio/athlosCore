@@ -1,12 +1,13 @@
-import Button from '@/components/ui/button';
-import Card from '@/components/ui/card';
+import Button from '@/components/ui/Button';
+import Card from '@/components/ui/Card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import PlayerAvatar from '@/components/ui/playerAvatar';
+import PlayerAvatar from '@/components/ui/PlayerAvatar';
 import ProgressIndicator from '@/components/ui/progressIndicator';
 import { BorderRadius, Colors, Spacing, Typography, Shadows, Gradients, Animation } from '@/constants/theme';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useTheme } from '@/contexts/ThemeContext';
-import React, { useState, useEffect, useMemo } from 'react';
+import { useTeamStore, usePlayerStore } from '@/stores';
+import React, { useState, useEffect } from 'react';
 import {
   Dimensions,
   ScrollView,
@@ -35,25 +36,12 @@ import Animated, {
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import playerStatsService from '@/services/api/playerStatsService';
-import playerService from '@/services/api/playerService';
 import userService from '@/services/api/userService';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Sentry from '@sentry/react-native';
 import { ComponentErrorBoundary } from '@/components/component-error-boundary';
 import PlayerComparison from '@/components/analytics/PlayerComparison';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-interface Player {
-  id: string;
-  name: string;
-  jersey_number: number;
-  position: string;
-  height?: string;
-  weight?: number;
-  team_id: string;
-  imageUri?: string;
-}
 
 interface PlayerStats {
   player_id: string;
@@ -78,8 +66,17 @@ interface Coach {
 type Timeframe = 'season' | 'last5' | 'last10';
 
 function PlayerAnalyticsContent() {
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  // Store hooks
+  const { selectedTeam } = useTeamStore();
+  const { 
+    players, 
+    selectedPlayer, 
+    setSelectedPlayer, 
+    loadPlayers,
+    isLoading: playersLoading 
+  } = usePlayerStore();
+
+  // Local state
   const [playerStats, setPlayerStats] = useState<PlayerStats | null>(null);
   const [allPlayerStats, setAllPlayerStats] = useState<Map<string, PlayerStats>>(new Map());
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>('season');
@@ -105,6 +102,13 @@ function PlayerAnalyticsContent() {
   }, []);
 
   useEffect(() => {
+    // Load players when team changes
+    if (selectedTeam) {
+      loadPlayers(selectedTeam.id);
+    }
+  }, [selectedTeam]);
+
+  useEffect(() => {
     if (selectedPlayer) {
       loadPlayerStats(selectedPlayer.id);
     }
@@ -118,8 +122,18 @@ function PlayerAnalyticsContent() {
       // Load coach profile
       await loadCoachProfile();
 
-      // Load players
-      await loadPlayers();
+      // Check if team is selected
+      if (!selectedTeam) {
+        throw new Error('No team selected. Please select a team first.');
+      }
+
+      // Load players from store
+      await loadPlayers(selectedTeam.id);
+
+      // Auto-select first player if none selected
+      if (players.length > 0 && !selectedPlayer) {
+        setSelectedPlayer(players[0]);
+      }
 
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to load data';
@@ -155,39 +169,17 @@ function PlayerAnalyticsContent() {
     }
   };
 
-  const loadPlayers = async () => {
-    try {
-      const teamId = await AsyncStorage.getItem('current_team_id');
-      
-      if (!teamId) {
-        throw new Error('No team selected. Please select a team first.');
-      }
+  const loadAllPlayersStats = async () => {
+    if (!selectedTeam) return;
 
-      const { players: fetchedPlayers } = await playerService.getPlayers({ team_id: teamId });
-      setPlayers(fetchedPlayers);
-
-      // Load stats for all players for comparison
-      await loadAllPlayersStats(fetchedPlayers, teamId);
-
-      // Auto-select first player
-      if (fetchedPlayers.length > 0 && !selectedPlayer) {
-        setSelectedPlayer(fetchedPlayers[0]);
-      }
-
-    } catch (err) {
-      throw err;
-    }
-  };
-
-  const loadAllPlayersStats = async (playersList: Player[], teamId: string) => {
     try {
       const statsMap = new Map<string, PlayerStats>();
       
       // Load stats for each player
       await Promise.all(
-        playersList.map(async (player) => {
+        players.map(async (player) => {
           try {
-            const stats = await playerStatsService.getPlayerStats(player.id, teamId);
+            const stats = await playerStatsService.getPlayerStats(player.id, selectedTeam.id);
             if (stats) {
               statsMap.set(player.id, stats);
             }
@@ -204,14 +196,10 @@ function PlayerAnalyticsContent() {
   };
 
   const loadPlayerStats = async (playerId: string) => {
-    try {
-      const teamId = await AsyncStorage.getItem('current_team_id');
-      
-      if (!teamId) {
-        return;
-      }
+    if (!selectedTeam) return;
 
-      const stats = await playerStatsService.getPlayerStats(playerId, teamId);
+    try {
+      const stats = await playerStatsService.getPlayerStats(playerId, selectedTeam.id);
       setPlayerStats(stats);
 
       // Also update in allPlayerStats
@@ -231,9 +219,12 @@ function PlayerAnalyticsContent() {
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      await loadPlayers();
-      if (selectedPlayer) {
-        await loadPlayerStats(selectedPlayer.id);
+      if (selectedTeam) {
+        await loadPlayers(selectedTeam.id);
+        await loadAllPlayersStats();
+        if (selectedPlayer) {
+          await loadPlayerStats(selectedPlayer.id);
+        }
       }
       setError(null);
     } catch (err) {
@@ -359,24 +350,6 @@ function PlayerAnalyticsContent() {
     );
   };
 
-  const handleShareAnalysis = () => {
-    if (!selectedPlayer) return;
-    
-    Alert.alert(
-      'Share Analysis',
-      `Share performance analysis for ${selectedPlayer.name}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Share', 
-          onPress: () => {
-            console.log('Sharing analysis for:', selectedPlayer.name);
-          }
-        }
-      ]
-    );
-  };
-
   const handlePressIn = () => {
     scale.value = withSpring(Animation.scale.press, Animation.spring.snappy);
   };
@@ -390,13 +363,34 @@ function PlayerAnalyticsContent() {
   }));
 
   // Loading State
-  if (loading) {
+  if (loading || playersLoading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: currentColors.background }]}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={currentColors.primary} />
           <Text style={[styles.loadingText, { color: currentColors.textSecondary }]}>
             Loading analytics...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // No Team Selected
+  if (!selectedTeam) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: currentColors.background }]}>
+        <View style={styles.emptyContainer}>
+          <IconSymbol 
+            name="sportscourt.fill" 
+            size={64} 
+            color={currentColors.textLight}
+          />
+          <Text style={[styles.emptyTitle, { color: currentColors.text }]}>
+            No Team Selected
+          </Text>
+          <Text style={[styles.emptyMessage, { color: currentColors.textSecondary }]}>
+            Please select a team to view player analytics.
           </Text>
         </View>
       </SafeAreaView>
@@ -526,7 +520,9 @@ function PlayerAnalyticsContent() {
               <IconSymbol name="chart.line.uptrend.xyaxis" size={40} color="#FFFFFF" />
               <View style={styles.heroText}>
                 <Text style={styles.heroTitle}>Performance Insights</Text>
-                <Text style={styles.heroSubtitle}>AI-powered player analytics & development</Text>
+                <Text style={styles.heroSubtitle}>
+                  {selectedTeam.name} • AI-powered analytics
+                </Text>
               </View>
             </View>
           </Card>
@@ -838,7 +834,10 @@ function PlayerAnalyticsContent() {
             {players.length >= 2 && (
               <Button
                 title="Compare Players"
-                onPress={() => setShowComparison(true)}
+                onPress={() => {
+                  loadAllPlayersStats();
+                  setShowComparison(true);
+                }}
                 variant="primaryGradient"
                 icon={<IconSymbol name="chart.bar.xaxis" size={18} color="#FFFFFF" />}
                 style={styles.buttonWrapper}

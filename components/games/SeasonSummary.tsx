@@ -1,8 +1,7 @@
-// File: components/games/SeasonSummary.tsx
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Animated, { ZoomIn } from 'react-native-reanimated';
-import Card from '@/components/ui/card';
+import Card from '@/components/ui/Card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import ProgressIndicator from '@/components/ui/progressIndicator';
 import { Spacing, Typography } from '@/constants/theme';
@@ -18,16 +17,33 @@ interface SeasonSummaryProps {
       fieldGoalPercentage: number;
     };
   };
+  // ✅ NEW: Accessibility props
+  accessibilityLabel?: string;
 }
 
-export default function SeasonSummary({ team }: SeasonSummaryProps) {
+export default function SeasonSummary({ 
+  team,
+  accessibilityLabel,
+}: SeasonSummaryProps) {
   const winPercentage = (team.record.wins / (team.record.wins + team.record.losses)) * 100;
 
   return (
-    <Animated.View entering={ZoomIn.delay(600).duration(800).springify()}>
+    <Animated.View 
+      entering={ZoomIn.delay(600).duration(800).springify()}
+      // ✅ ADD: Card accessibility
+      accessible={true}
+      accessibilityRole="summary"
+      accessibilityLabel={
+        accessibilityLabel || 
+        `Season summary: Record ${team.record.wins} wins, ${team.record.losses} losses, ${winPercentage.toFixed(1)} percent win rate. Average ${team.stats.averagePoints} points per game. Field goal percentage: ${team.stats.fieldGoalPercentage} percent.`
+      }
+    >
       <Card variant="gradient" padding="large" style={styles.card}>
         <View style={styles.content}>
-          <View style={styles.left}>
+          <View 
+            style={styles.left}
+            accessible={false} // Parent handles accessibility
+          >
             <ProgressIndicator
               progress={winPercentage}
               size={100}
@@ -39,7 +55,10 @@ export default function SeasonSummary({ team }: SeasonSummaryProps) {
             />
           </View>
           
-          <View style={styles.right}>
+          <View 
+            style={styles.right}
+            accessible={false} // Parent handles accessibility
+          >
             <Text style={styles.title}>Season Record</Text>
             <Text style={styles.record}>
               {team.record.wins}-{team.record.losses}

@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, FadeInUp, FadeOut, FadeOutUp, SlideInRight } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import PlayerAvatar from '@/components/ui/playerAvatar';
+import PlayerAvatar from '@/components/ui/PlayerAvatar';
 import { BorderRadius, Colors, Spacing, Typography, Shadows, Gradients } from '@/constants/theme';
 import { mockCoach, mockGames, mockTeams } from '@/data/mockData';
 import { useTheme } from '@/contexts/ThemeContext';

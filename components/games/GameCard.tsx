@@ -4,9 +4,9 @@ import { View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
-import Card from '@/components/ui/card';
+import Card from '@/components/ui/Card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import Button from '@/components/ui/button';
+import Button from '@/components/ui/Button';
 import { BorderRadius, Colors, Spacing, Typography, Shadows, Gradients } from '@/constants/theme';
 import TopPerformers from './TopPerformers';
 
@@ -17,6 +17,9 @@ interface GameCardProps {
   onViewHighlights: () => void;
   currentColors: any;
   isDark: boolean;
+  // ✅ NEW: Accessibility props
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
 }
 
 export default function GameCard({
@@ -26,6 +29,8 @@ export default function GameCard({
   onViewHighlights,
   currentColors,
   isDark,
+  accessibilityLabel,
+  accessibilityHint,
 }: GameCardProps) {
   const getGameResult = () => {
     if (game.score.home > game.score.away) {
@@ -37,8 +42,31 @@ export default function GameCard({
 
   const gameResult = getGameResult();
 
+  // ✅ NEW: Generate comprehensive accessibility label
+  const generateAccessibilityLabel = () => {
+    if (accessibilityLabel) return accessibilityLabel;
+
+    const resultText = gameResult.isWin ? 'Win' : 'Loss';
+    const marginText = `by ${gameResult.margin} points`;
+    const highlightsText = game.highlights ? `, ${game.highlights.length} highlights available` : '';
+    const statsText = game.boxScore 
+      ? `. Field goal percentage: ${game.boxScore.teamStats.fieldGoalPercentage} percent. Three point percentage: ${game.boxScore.teamStats.threePointPercentage} percent. Rebounds: ${game.boxScore.teamStats.rebounds}. Turnovers: ${game.boxScore.teamStats.turnovers}.`
+      : '';
+
+    return `${resultText} against ${game.awayTeam.name} on ${game.date}, ${marginText}. Final score: ${game.homeTeam.name} ${game.score.home}, ${game.awayTeam.name} ${game.score.away}${highlightsText}${statsText}`;
+  };
+
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.9} style={styles.wrapper}>
+    <TouchableOpacity 
+      onPress={onPress} 
+      activeOpacity={0.9} 
+      style={styles.wrapper}
+      // ✅ ADD: Card accessibility
+      accessibilityRole="button"
+      accessibilityLabel={generateAccessibilityLabel()}
+      accessibilityHint={accessibilityHint || (isSelected ? "Double tap to collapse game details" : "Double tap to expand game details")}
+      accessibilityState={{ selected: isSelected }}
+    >
       <Card
         variant="elevated_high"
         padding="none"
@@ -48,9 +76,16 @@ export default function GameCard({
         ]}
       >
         {/* Game Thumbnail */}
-        <View style={styles.thumbnail}>
+        <View 
+          style={styles.thumbnail}
+          accessible={false} // Parent handles accessibility
+        >
           {game.thumbnail ? (
-            <Image source={{ uri: game.thumbnail }} style={styles.thumbnailImage} />
+            <Image 
+              source={{ uri: game.thumbnail }} 
+              style={styles.thumbnailImage}
+              accessible={false} // Decorative in this context
+            />
           ) : (
             <LinearGradient
               colors={gameResult.isWin ? Gradients.success.colors : [Colors.error, '#F87171']}
@@ -66,16 +101,22 @@ export default function GameCard({
             style={styles.thumbnailOverlay}
           >
             <View style={styles.thumbnailInfo}>
-              <View style={[
-                styles.resultBadge,
-                { backgroundColor: gameResult.isWin ? Colors.success : Colors.error }
-              ]}>
+              <View 
+                style={[
+                  styles.resultBadge,
+                  { backgroundColor: gameResult.isWin ? Colors.success : Colors.error }
+                ]}
+                accessible={false} // Parent handles accessibility
+              >
                 <Text style={styles.resultText}>{gameResult.result}</Text>
                 <Text style={styles.marginText}>+{gameResult.margin}</Text>
               </View>
 
               {game.highlights && (
-                <View style={styles.highlightsBadge}>
+                <View 
+                  style={styles.highlightsBadge}
+                  accessible={false} // Parent handles accessibility
+                >
                   <IconSymbol name="star.fill" size={14} color={'dark'} />
                   <Text style={styles.highlightsBadgeText}>{game.highlights.length}</Text>
                 </View>
@@ -85,7 +126,10 @@ export default function GameCard({
         </View>
 
         {/* Game Info */}
-        <View style={[styles.gameInfo, { backgroundColor: currentColors.cardBackground }]}>
+        <View 
+          style={[styles.gameInfo, { backgroundColor: currentColors.cardBackground }]}
+          accessible={false} // Parent handles accessibility
+        >
           {/* Teams Row */}
           <View style={styles.teamsRow}>
             <View style={styles.teamSection}>
@@ -130,7 +174,11 @@ export default function GameCard({
                 { label: 'REB', value: game.boxScore.teamStats.rebounds, icon: 'arrow.up.circle.fill' },
                 { label: 'TO', value: game.boxScore.teamStats.turnovers, icon: 'exclamationmark.triangle.fill' },
               ].map((stat, idx) => (
-                <View key={idx} style={[styles.statPill, { backgroundColor: currentColors.surface }]}>
+                <View 
+                  key={idx} 
+                  style={[styles.statPill, { backgroundColor: currentColors.surface }]}
+                  accessible={false} // Parent handles accessibility
+                >
                   <IconSymbol name={stat.icon} size={12} color={currentColors.primary} />
                   <Text style={[styles.statPillText, { color: currentColors.text }]}>
                     {stat.value}
@@ -146,6 +194,11 @@ export default function GameCard({
           <Animated.View
             entering={FadeIn.duration(300)}
             style={[styles.expandedContent, { backgroundColor: currentColors.surface }]}
+            // ✅ ADD: Expanded section accessibility
+            accessible={true}
+            accessibilityRole="region"
+            accessibilityLabel="Game details expanded"
+            accessibilityLiveRegion="polite" // Announces when expanded
           >
             <BlurView intensity={10} tint={isDark ? 'dark' : 'light'} style={styles.expandedBlur}>
               <TopPerformers
@@ -154,13 +207,21 @@ export default function GameCard({
               />
 
               {/* Action Buttons */}
-              <View style={styles.gameActions}>
+              <View 
+                style={styles.gameActions}
+                accessible={true}
+                accessibilityRole="menu"
+                accessibilityLabel="Game actions"
+              >
                 <Button
                   title="AI Analysis"
                   onPress={() => console.log('Analyze')}
                   variant="primaryGradient"
                   icon={<IconSymbol name="star.fill" size={16} color={'dark'} />}
                   style={styles.actionButton}
+                  // ✅ ADD: Button accessibility
+                  accessibilityLabel="View AI game analysis"
+                  accessibilityHint="Opens detailed AI-powered insights and recommendations for this game"
                 />
                 {game.highlights && (
                   <Button
@@ -169,6 +230,9 @@ export default function GameCard({
                     variant="outline"
                     icon={<IconSymbol name="play.fill" size={16} color={currentColors.primary} />}
                     style={styles.actionButton}
+                    // ✅ ADD: Button accessibility
+                    accessibilityLabel={`Watch ${game.highlights.length} game highlights`}
+                    accessibilityHint="Opens video highlights from this game"
                   />
                 )}
               </View>

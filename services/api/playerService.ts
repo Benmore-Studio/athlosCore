@@ -1,6 +1,6 @@
 // File: services/api/playerService.ts
 import apiClient from './client';
-import { API_ENDPOINTS } from '@/config/api';
+import { API_ENDPOINTS, withRetry } from '@/config/api';
 import offlineApiService from './offlineApiService';
 
 export interface Player {
@@ -37,7 +37,7 @@ export interface PlayerStats {
 
 class PlayerService {
   /**
-   * Get players with offline support
+   * Get players with offline support and retry
    */
   async getPlayers(filters?: {
     video_id?: string;
@@ -52,8 +52,10 @@ class PlayerService {
     
     return offlineApiService.fetchWithCache(
       async () => {
-        const response = await apiClient.get(API_ENDPOINTS.PLAYERS, { params: filters });
-        return response.data;
+        return withRetry(async () => {
+          const response = await apiClient.get(API_ENDPOINTS.PLAYERS, { params: filters });
+          return response.data;
+        });
       },
       { 
         key: cacheKey,
@@ -63,17 +65,19 @@ class PlayerService {
   }
 
   /**
-   * Get player by ID with offline support
+   * Get player by ID with offline support and retry
    */
   async getPlayerById(playerId: string, includeStats = false): Promise<Player> {
     const cacheKey = `player_${playerId}_${includeStats ? 'with_stats' : 'no_stats'}`;
     
     return offlineApiService.fetchWithCache(
       async () => {
-        const response = await apiClient.get(API_ENDPOINTS.PLAYER_BY_ID(playerId), {
-          params: { stats: includeStats },
+        return withRetry(async () => {
+          const response = await apiClient.get(API_ENDPOINTS.PLAYER_BY_ID(playerId), {
+            params: { stats: includeStats },
+          });
+          return response.data;
         });
-        return response.data;
       },
       { 
         key: cacheKey,
@@ -83,7 +87,7 @@ class PlayerService {
   }
 
   /**
-   * Create player
+   * Create player with retry
    * Note: Clears relevant caches after creation
    */
   async createPlayer(data: {
@@ -94,7 +98,9 @@ class PlayerService {
     name?: string;
     player_number?: number;
   }): Promise<void> {
-    await apiClient.post(API_ENDPOINTS.PLAYERS, data);
+    await withRetry(async () => {
+      await apiClient.post(API_ENDPOINTS.PLAYERS, data);
+    });
     
     // Clear relevant caches
     await offlineApiService.clearCache(`players_${data.team_id}_1`);
@@ -103,17 +109,19 @@ class PlayerService {
   }
 
   /**
-   * Update player
+   * Update player with retry
    * Note: Clears relevant caches after update
    */
   async updatePlayer(playerId: string, data: { name?: string; player_number?: number }): Promise<void> {
-    await apiClient.put(API_ENDPOINTS.PLAYER_BY_ID(playerId), data);
+    await withRetry(async () => {
+      await apiClient.put(API_ENDPOINTS.PLAYER_BY_ID(playerId), data);
+    });
     
     // Clear player-specific cache
     await offlineApiService.clearCache(`player_${playerId}_with_stats`);
     await offlineApiService.clearCache(`player_${playerId}_no_stats`);
     
-    // Clear players list caches (you might want to be more specific based on team_id if available)
+    // Clear players list caches
     const cachedKeys = await offlineApiService.getCachedKeys();
     const playerListKeys = cachedKeys.filter(key => key.startsWith('players_'));
     for (const key of playerListKeys) {
@@ -122,11 +130,13 @@ class PlayerService {
   }
 
   /**
-   * Delete player
+   * Delete player with retry
    * Note: Clears relevant caches after deletion
    */
   async deletePlayer(playerId: string): Promise<void> {
-    await apiClient.delete(API_ENDPOINTS.PLAYER_BY_ID(playerId));
+    await withRetry(async () => {
+      await apiClient.delete(API_ENDPOINTS.PLAYER_BY_ID(playerId));
+    });
     
     // Clear player-specific cache
     await offlineApiService.clearCache(`player_${playerId}_with_stats`);
