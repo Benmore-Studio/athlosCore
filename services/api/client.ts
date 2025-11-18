@@ -71,8 +71,28 @@ apiClient.interceptors.response.use(
       console.error('═══════════════════════════════════════════════════════');
       console.error('❌ API ERROR');
       console.error('═══════════════════════════════════════════════════════');
+
+      // 🔍 DETAILED ERROR DEBUGGING
+      console.error('🔍 Error Details:');
+      console.error('  • error.code:', error.code);
+      console.error('  • error.message:', error.message);
+      console.error('  • error.name:', error.name);
+      console.error('  • Has response:', !!error.response);
+      console.error('  • Has request:', !!error.request);
+
+      // Log the full error object structure
+      if (error.toJSON) {
+        console.error('  • Full error (JSON):', JSON.stringify(error.toJSON(), null, 2));
+      }
+
+      // Check for underlying native error
+      if (error.cause) {
+        console.error('  • Underlying cause:', error.cause);
+      }
+
+      console.error('═══════════════════════════════════════════════════════');
     }
-    
+
     // ✅ SSL Error Detection
     const isSSLError = 
       error.code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' ||

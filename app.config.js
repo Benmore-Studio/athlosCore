@@ -20,21 +20,9 @@ module.exports = {
       requireFullScreen: false,
       infoPlist: {
         NSAppTransportSecurity: {
-          NSAllowsArbitraryLoads: true, // ✅ Enable for development with self-signed certs
-          NSExceptionDomains: {
-            "athloscore.someexamplesof.ai": {
-              NSExceptionAllowsInsecureHTTPLoads: true,
-              NSIncludesSubdomains: true,
-              NSExceptionMinimumTLSVersion: "TLSv1.0",
-              NSExceptionRequiresForwardSecrecy: false,
-              NSThirdPartyExceptionAllowsInsecureHTTPLoads: true,
-              NSThirdPartyExceptionRequiresForwardSecrecy: false,
-            },
-            "localhost": {
-              NSExceptionAllowsInsecureHTTPLoads: true,
-              NSIncludesSubdomains: true
-            }
-          }
+          // ✅ DEVELOPMENT ONLY: Allow all connections including self-signed HTTPS
+          // ⚠️ Remove NSExceptionDomains - they override the global setting
+          NSAllowsArbitraryLoads: true,
         }
       }
     },
