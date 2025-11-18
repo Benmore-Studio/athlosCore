@@ -20,7 +20,7 @@ module.exports = {
       requireFullScreen: false,
       infoPlist: {
         NSAppTransportSecurity: {
-          NSAllowsArbitraryLoads: false,
+          NSAllowsArbitraryLoads: true, // ✅ Enable for development with self-signed certs
           NSExceptionDomains: {
             "athloscore.someexamplesof.ai": {
               NSExceptionAllowsInsecureHTTPLoads: true,
