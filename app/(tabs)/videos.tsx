@@ -1,11 +1,11 @@
 import React, { useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  FlatList, 
-  TouchableOpacity, 
-  Image, 
-  ActivityIndicator, 
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  Image,
+  ActivityIndicator,
   StyleSheet,
   Alert
 } from 'react-native';
@@ -14,7 +14,7 @@ import Animated, { FadeIn, FadeInDown, FadeInUp, SlideInRight } from 'react-nati
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
-import { fetchVideos } from '@/services/videoService';
+import videoService from '@/services/api/videoService'; // ✅ Use real API service
 import { useVideoStore } from '@/stores'; // ✅ Import video store
 import { useAuth } from '@/contexts/AuthContext'; // ✅ Import auth context
 import { useTheme } from '@/contexts/ThemeContext';
@@ -22,6 +22,7 @@ import { BorderRadius, Spacing, Typography, Shadows, Gradients } from '@/constan
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import * as Sentry from '@sentry/react-native';
 import { ComponentErrorBoundary } from '@/components/component-error-boundary';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ✅ Mock videos for demo/fallback
 const MOCK_VIDEOS = [
@@ -82,7 +83,7 @@ function VideosScreenContent() {
       } else {
         setLoading(true);
       }
-      
+
       setError(null);
 
       // ✅ Use mock data in demo mode
@@ -92,35 +93,81 @@ function VideosScreenContent() {
         setUsingMockData(true);
         return;
       }
-      
-      const data = await fetchVideos();
+
+      // ✅ Get org_id from AsyncStorage
+      const orgId = await AsyncStorage.getItem('current_org_id');
+
+      console.log('📹 Fetching videos from API...');
+      console.log('   Org ID:', orgId || 'all');
+
+      // ✅ Use real API service
+      const data = await videoService.getVideos({
+        org_id: orgId || undefined,
+        status: 'completed' // Only show completed videos
+      });
+
+      console.log('✅ Videos fetched:', data.length);
+
+      // ✅ Transform API data to match component format
+      const transformedVideos = data.map((video: any) => ({
+        id: video.video_id,
+        title: video.title || 'Untitled Video',
+        thumbnail: video.thumbnail_url,
+        duration: video.duration || '--:--',
+        views: video.views || '0',
+        date: formatDate(video.created_at),
+        videoUrl: video.gcsPath,
+        uploadedAt: video.created_at,
+      }));
+
       // ✅ Store videos in Zustand
-      setVideos(Array.isArray(data) ? data : []);
+      setVideos(transformedVideos);
       setUsingMockData(false);
-      
+
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to load videos';
-      
+
       // ✅ Fallback to mock data on error
-      console.error('API fetch failed, using mock data:', err);
+      console.error('❌ API fetch failed, using mock data:', err);
       console.log('📦 Using mock videos (API Fallback)');
       setVideos(MOCK_VIDEOS);
       setUsingMockData(true);
       setError('Unable to connect to server. Using sample data.');
-      
+
       Sentry.captureException(err, {
         tags: { screen: 'videos', action: 'load_videos' },
-        extra: { 
+        extra: {
           isRefresh,
-          errorMessage: errorMsg 
+          errorMessage: errorMsg
         }
       });
-      
+
       console.error('Error loading videos:', err);
-      
+
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  // Helper function to format dates
+  const formatDate = (dateString?: string): string => {
+    if (!dateString) return 'Recent';
+
+    try {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffInMs = now.getTime() - date.getTime();
+      const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+
+      if (diffInDays === 0) return 'Today';
+      if (diffInDays === 1) return 'Yesterday';
+      if (diffInDays < 7) return `${diffInDays} days ago`;
+      if (diffInDays < 30) return `${Math.floor(diffInDays / 7)} weeks ago`;
+      if (diffInDays < 365) return `${Math.floor(diffInDays / 30)} months ago`;
+      return `${Math.floor(diffInDays / 365)} years ago`;
+    } catch {
+      return 'Recent';
     }
   };
 

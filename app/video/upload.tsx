@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -38,6 +38,16 @@ import { router } from "expo-router";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
+// ✅ Debug helper to check AsyncStorage
+const debugAsyncStorage = async () => {
+  console.log('🔍 Debugging AsyncStorage:');
+  const authToken = await AsyncStorage.getItem('auth_token');
+  const orgId = await AsyncStorage.getItem('current_org_id');
+  console.log('   auth_token:', authToken ? 'Present ✅' : 'Missing ❌');
+  console.log('   current_org_id:', orgId || 'Missing ❌');
+  return { authToken, orgId };
+};
+
 function UploadScreenContent() {
   const theme = useColorScheme() ?? 'light';
   const isDark = theme === 'dark';
@@ -56,6 +66,11 @@ function UploadScreenContent() {
   const progressValue = useSharedValue(0);
   const successScale = useSharedValue(0);
   const videoOpacity = useSharedValue(0);
+
+  // ✅ Debug on mount
+  useEffect(() => {
+    debugAsyncStorage();
+  }, []);
 
   const pickVideo = async () => {
     try {
@@ -96,6 +111,20 @@ function UploadScreenContent() {
           return;
         }
 
+        // Validate video URI
+        if (!asset.uri || asset.uri.trim() === '') {
+          const errorMsg = "Invalid video file. Please try selecting another video.";
+          setError(errorMsg);
+          Alert.alert("Invalid Video", errorMsg);
+          return;
+        }
+
+        console.log('✅ Video selected:', {
+          uri: asset.uri.substring(0, 50) + '...',
+          fileName: asset.fileName,
+          fileSize: asset.fileSize,
+        });
+
         setVideoUri(asset.uri);
         setVideoAsset(asset);
         videoOpacity.value = withTiming(1, { duration: 300 });
@@ -132,6 +161,34 @@ function UploadScreenContent() {
         return;
       }
 
+      // ✅ Check authentication token
+      const authToken = await AsyncStorage.getItem('auth_token');
+      if (!authToken) {
+        Alert.alert(
+          "Authentication Required",
+          "You must be logged in to upload videos. Please log in and try again.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Login", onPress: () => router.replace('/(auth)/login') }
+          ]
+        );
+        return;
+      }
+
+      // ✅ Check org_id
+      const orgId = await AsyncStorage.getItem('current_org_id');
+      if (!orgId) {
+        Alert.alert(
+          "Organization Required",
+          "Please select an organization before uploading videos.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Select Org", onPress: () => router.push('/(auth)/org-selection') }
+          ]
+        );
+        return;
+      }
+
       setUploading(true);
       setProgress(0);
       setError(null);
@@ -140,13 +197,29 @@ function UploadScreenContent() {
       // Extract file name from URI
       const fileName = videoAsset.fileName || videoUri.split('/').pop() || `video_${Date.now()}.mp4`;
 
+      console.log('📋 Upload prerequisites:');
+      console.log('   Auth token:', authToken ? 'Present' : 'Missing');
+      console.log('   Org ID:', orgId);
+      console.log('   File name:', fileName);
+
       // Stage 1: Getting upload URL (10% progress)
       setUploadStage("Getting upload URL...");
       setProgress(10);
       progressValue.value = withTiming(0.1, { duration: 300 });
 
+      console.log('📤 Requesting upload URL for:', fileName);
       const { upload_url, video_id } = await videoService.getUploadUrl(fileName);
-      
+      console.log('✅ Received upload URL:', upload_url ? 'Valid' : 'EMPTY', '| video_id:', video_id);
+
+      // Validate upload URL
+      if (!upload_url || upload_url.trim() === '') {
+        throw new Error('Server did not provide a valid upload URL. Please try again.');
+      }
+
+      if (!video_id || video_id.trim() === '') {
+        throw new Error('Server did not provide a valid video ID. Please try again.');
+      }
+
       // Stage 2: Uploading to GCS (10% - 80% progress)
       setUploadStage("Uploading video to cloud...");
       setProgress(20);
@@ -165,14 +238,13 @@ function UploadScreenContent() {
       setProgress(85);
       progressValue.value = withTiming(0.85, { duration: 300 });
 
-      const orgId = await AsyncStorage.getItem('current_org_id');
-      
-      if (!orgId) {
-        throw new Error("Organization ID not found. Please log in again.");
-      }
-
       // Extract GCS path without query params
       const gcsPath = upload_url.split('?')[0];
+
+      console.log('💾 Saving video metadata:');
+      console.log('   video_id:', video_id);
+      console.log('   org_id:', orgId);
+      console.log('   gcsPath:', gcsPath.substring(0, 60) + '...');
 
       await videoService.saveVideoMetadata({
         video_id,
@@ -226,19 +298,24 @@ function UploadScreenContent() {
       setProgress(0);
       setUploadStage("");
       progressValue.value = 0;
-      
+
+      // Enhanced error logging
+      console.error("❌ Video upload error:", err);
+      console.error("   Error type:", err instanceof Error ? err.constructor.name : typeof err);
+      console.error("   Upload stage:", uploadStage);
+
       const errorMsg = err instanceof Error ? err.message : "Failed to upload video. Please check your connection and try again.";
       setError(errorMsg);
-      
+
       Sentry.captureException(err, {
-        tags: { 
-          screen: 'upload', 
+        tags: {
+          screen: 'upload',
           action: 'upload_video',
           hasTitle: !!title,
           hasDescription: !!description,
           stage: uploadStage
         },
-        extra: { 
+        extra: {
           errorMessage: errorMsg,
           videoUri: videoUri?.substring(0, 50),
           titleLength: title.length,
@@ -246,17 +323,15 @@ function UploadScreenContent() {
           fileName: videoAsset?.fileName
         }
       });
-      
+
       Alert.alert(
-        "Upload Failed", 
+        "Upload Failed",
         errorMsg,
         [
           { text: "Cancel", style: "cancel" },
           { text: "Retry", onPress: handleUpload }
         ]
       );
-      
-      console.error("Video upload error:", err);
     }
   };
 
@@ -372,8 +447,8 @@ function UploadScreenContent() {
         </Animated.View>
 
         {/* Video Preview */}
-        {videoUri && (
-          <Animated.View 
+        {videoUri && videoUri.trim() !== '' && (
+          <Animated.View
             style={[styles.videoPreviewContainer, videoAnimatedStyle]}
             entering={FadeIn.duration(400)}
           >
@@ -383,6 +458,10 @@ function UploadScreenContent() {
                 style={styles.video}
                 useNativeControls
                 resizeMode="contain"
+                onError={(error) => {
+                  console.error('❌ Video preview error:', error);
+                  setError('Cannot preview this video. You can still try uploading it.');
+                }}
               />
               
               {/* Video badge */}
@@ -817,7 +896,7 @@ const styles = StyleSheet.create({
   },
 });
 
-// import React, { useState } from "react";
+// import React, { useState, useEffect } from "react";
 // import {
 //   View,
 //   Text,

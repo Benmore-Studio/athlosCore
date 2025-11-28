@@ -20,6 +20,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import ThemeToggle from '@/components/settings/ThemeToggle';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ComponentErrorBoundary } from '@/components/component-error-boundary';
+import authService from '@/services/api/authService';
+import offlineApiService from '@/services/api/offlineApiService';
 
 function SettingsScreenContent() {
   const { themeMode, currentColors, setThemeMode } = useTheme();
@@ -58,10 +60,35 @@ function SettingsScreenContent() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await AsyncStorage.clear();
+              console.log('🚪 Starting logout process...');
+
+              // Clear auth data (token, user data)
+              await authService.logout();
+
+              // Clear all API caches
+              await offlineApiService.clearAllCache();
+
+              // Clear current org ID
+              await AsyncStorage.removeItem('current_org_id');
+
+              console.log('✅ Logout complete');
+
+              // Navigate to login screen
               router.replace('/(auth)/login');
             } catch (error) {
-              console.error('Logout error:', error);
+              console.error('❌ Logout error:', error);
+
+              // Even if there's an error, try to navigate to login
+              Alert.alert(
+                'Logout Error',
+                'There was an issue logging out, but we\'ll sign you out anyway.',
+                [
+                  {
+                    text: 'OK',
+                    onPress: () => router.replace('/(auth)/login')
+                  }
+                ]
+              );
             }
           },
         },

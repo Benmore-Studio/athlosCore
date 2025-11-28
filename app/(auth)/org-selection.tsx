@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface Organization {
   id: string;
@@ -23,6 +24,10 @@ export default function OrgSelectionScreen() {
   const { user } = useAuth();
 
   useEffect(() => {
+    loadOrganizations();
+  }, []);
+
+  const loadOrganizations = async () => {
     // Fetch user's organizations
     // For now, using mock data
     setOrganizations([
@@ -31,7 +36,18 @@ export default function OrgSelectionScreen() {
       { id: '3', name: 'Hoops Academy', members: 45, icon: '🎯' },
       { id: '4', name: 'Elite Training', members: 203, icon: '🏆' },
     ]);
-  }, []);
+
+    // ✅ Check if there's already a saved organization and auto-select it
+    try {
+      const savedOrgId = await AsyncStorage.getItem('current_org_id');
+      if (savedOrgId) {
+        console.log('📋 Found existing org selection:', savedOrgId);
+        setSelectedOrg(savedOrgId);
+      }
+    } catch (error) {
+      console.error('Failed to load saved org:', error);
+    }
+  };
 
   const handleContinue = async () => {
     if (!selectedOrg) {
@@ -41,13 +57,24 @@ export default function OrgSelectionScreen() {
 
     setLoading(true);
     try {
-      // Save selected organization to user profile
-      // await saveUserOrganization(user.id, selectedOrg);
-      
-      // Navigate to main app
-      router.replace('/(tabs)');
+      // ✅ Save selected organization ID to AsyncStorage
+      await AsyncStorage.setItem('current_org_id', selectedOrg);
+
+      // Get the selected org name for logging
+      const selectedOrgData = organizations.find(org => org.id === selectedOrg);
+
+      console.log('✅ Organization selected:');
+      console.log('   Org ID:', selectedOrg);
+      console.log('   Org Name:', selectedOrgData?.name);
+
+      Alert.alert(
+        'Organization Selected',
+        `You've selected ${selectedOrgData?.name}. You can now upload videos!`,
+        [{ text: 'Continue', onPress: () => router.replace('/(tabs)') }]
+      );
     } catch (error) {
-      Alert.alert('Error', 'Failed to save organization');
+      console.error('❌ Failed to save organization:', error);
+      Alert.alert('Error', 'Failed to save organization. Please try again.');
     } finally {
       setLoading(false);
     }

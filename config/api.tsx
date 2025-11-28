@@ -60,6 +60,13 @@ export const API_ENDPOINTS = {
   TEAM_BY_ID: (id: string) => `/teams/${id}`,
   TEAM_UPDATE: (id: string) => `/teams/${id}`,
   TEAM_DELETE: (id: string) => `/teams/${id}`,
+
+  // Game Endpoints
+  GAMES: '/games',
+  GAME_BY_ID: (id: string) => `/games/${id}`,
+  GAME_UPDATE: (id: string) => `/games/${id}`,
+  GAME_DELETE: (id: string) => `/games/${id}`,
+  TEAM_SEASON_STATS: (teamId: string) => `/games/team/${teamId}/season-stats`,
 };
 
 // ✅ API Configuration Details (for debugging)
@@ -139,22 +146,18 @@ export async function withRetry<T>(
       // If this is a retry, wait before attempting
       if (attemptNumber > 0) {
         const delay = calculateRetryDelay(attemptNumber);
-        
-        if (__DEV__) {
-          console.log(`🔄 Retry attempt ${attemptNumber}/${maxRetries} after ${delay}ms`);
-        }
-        
+        if (__DEV__) console.log(`🔄 Retry ${attemptNumber}/${maxRetries} after ${delay}ms`);
         await sleep(delay);
       }
 
       // Attempt the API call
       const result = await apiCall();
-      
+
       // Success! Return the result
       if (attemptNumber > 0 && __DEV__) {
-        console.log(`✅ Request succeeded on retry attempt ${attemptNumber}`);
+        console.log(`✅ Succeeded on retry ${attemptNumber}`);
       }
-      
+
       return result;
 
     } catch (error) {
@@ -165,11 +168,8 @@ export async function withRetry<T>(
       const shouldRetryThisError = shouldRetry(error);
       const hasMoreRetries = attemptNumber <= maxRetries;
 
-      if (__DEV__) {
-        console.log(`❌ Request failed (attempt ${attemptNumber}/${maxRetries + 1})`);
-        console.log(`   Error: ${error.message || 'Unknown error'}`);
-        console.log(`   Retryable: ${shouldRetryThisError}`);
-        console.log(`   Has more retries: ${hasMoreRetries}`);
+      if (__DEV__ && !shouldRetryThisError) {
+        console.log(`❌ Failed (non-retryable): ${error.message || 'Unknown error'}`);
       }
 
       // If we shouldn't retry or have no more retries, throw the error
@@ -233,36 +233,7 @@ export class RetryExhaustedError extends Error {
 
 // ✅ Development mode logging
 if (__DEV__) {
-  console.log('═══════════════════════════════════════════════════════');
-  console.log('🔧 AthlosCore API Configuration');
-  console.log('═══════════════════════════════════════════════════════');
-  console.log('Environment:', __DEV__ ? 'DEVELOPMENT' : 'PRODUCTION');
-  console.log('Base URL:', API_CONFIG.BASE_URL);
-  console.log('Timeout:', `${API_CONFIG.TIMEOUT}ms`);
-  console.log('SSL Verify:', API_CONFIG.SSL_VERIFY);
-  console.log('Allow Self-Signed:', API_CONFIG.ALLOW_SELF_SIGNED);
-  console.log('Use Mock Data:', API_CONFIG.USE_MOCK_DATA);
-  console.log('');
-  console.log('Retry Configuration:');
-  console.log('  Max Retries:', API_CONFIG.RETRY.MAX_RETRIES);
-  console.log('  Initial Delay:', `${API_CONFIG.RETRY.INITIAL_DELAY}ms`);
-  console.log('  Max Delay:', `${API_CONFIG.RETRY.MAX_DELAY}ms`);
-  console.log('  Backoff Multiplier:', API_CONFIG.RETRY.BACKOFF_MULTIPLIER);
-  console.log('  Retry Status Codes:', API_CONFIG.RETRY.RETRY_STATUS_CODES.join(', '));
-  console.log('');
-  console.log('SSL Configuration:');
-  if (!API_CONFIG.SSL_VERIFY) {
-    console.log('  ⚠️  SSL verification DISABLED (development only)');
-    console.log('  ℹ️  Configured via app.config.js');
-    console.log('  ℹ️  iOS: NSExceptionDomains');
-    console.log('  ℹ️  Android: usesCleartextTraffic');
-  } else {
-    console.log('  ✅ SSL verification ENABLED (production)');
-  }
-  console.log('');
-  console.log('API Endpoints Registered:', Object.keys(API_ENDPOINTS).length);
-  console.log('API Version:', API_INFO.version);
-  console.log('═══════════════════════════════════════════════════════');
+  console.log('🔧 API Config:', API_CONFIG.BASE_URL, '| SSL:', API_CONFIG.SSL_VERIFY ? 'ON' : 'OFF');
 }
 
 // ✅ Type definitions for better TypeScript support

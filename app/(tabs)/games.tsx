@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View, RefreshControl, Easing } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, RefreshControl, Easing, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, FadeInUp, FadeOut, FadeOutUp, SlideInRight } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,10 +8,16 @@ import PlayerAvatar from '@/components/ui/PlayerAvatar';
 import { BorderRadius, Colors, Spacing, Typography, Shadows, Gradients } from '@/constants/theme';
 import { mockCoach, mockGames, mockTeams } from '@/data/mockData';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 import GameCard from '@/components/games/GameCard';
 import SeasonSummary from '@/components/games/SeasonSummary';
 import GameVideoModal from '@/components/games/GameVideoModal';
 import { Game } from '@/types/game';
+import gameService from '@/services/api/gameService';
+import teamService from '@/services/api/teamService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Sentry from '@sentry/react-native';
+import { ComponentErrorBoundary } from '@/components/component-error-boundary';
 
 // Animation configurations
 const ANIMATION_CONFIG = {
@@ -26,25 +32,148 @@ const ANIMATION_CONFIG = {
   stagger: 50,
 };
 
-export default function RecentGamesScreen() {
+// Mock games for demo/fallback
+const MOCK_GAMES = mockGames;
+
+function RecentGamesScreenContent() {
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [videoModalVisible, setVideoModalVisible] = useState(false);
   const [selectedVideoGame, setSelectedVideoGame] = useState<Game | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  
-  const { currentColors, isDark } = useTheme();
+  const [loading, setLoading] = useState(true);
+  const [games, setGames] = useState<Game[]>([]);
+  const [usingMockData, setUsingMockData] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedTeam, setSelectedTeam] = useState<any>(null);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
+  const { currentColors, isDark } = useTheme();
+  const { isDemoMode } = useAuth();
+
+  useEffect(() => {
+    loadGames();
+    loadSelectedTeam();
+  }, []);
+
+  const loadSelectedTeam = async () => {
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      // TODO: Fetch updated games data
-      // const updatedGames = await gameService.getRecentGames();
-    } catch (error) {
-      console.error('Failed to refresh games:', error);
+      // Try to get the selected team from storage or API
+      const teamId = await AsyncStorage.getItem('selected_team_id');
+      if (teamId) {
+        const team = await teamService.getTeamById(teamId);
+        setSelectedTeam(team);
+      } else {
+        // Fallback to mock team
+        setSelectedTeam(mockTeams[0]);
+      }
+    } catch (err) {
+      console.error('Failed to load team:', err);
+      setSelectedTeam(mockTeams[0]);
+    }
+  };
+
+  const loadGames = async (isRefresh = false) => {
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
+      setError(null);
+
+      // ✅ Use mock data in demo mode
+      if (isDemoMode) {
+        console.log('📦 Using mock games (Demo Mode)');
+        setGames(MOCK_GAMES);
+        setUsingMockData(true);
+        return;
+      }
+
+      // ✅ Get org_id from AsyncStorage
+      const orgId = await AsyncStorage.getItem('current_org_id');
+      const teamId = await AsyncStorage.getItem('selected_team_id');
+
+      console.log('🏀 Fetching games from API...');
+      console.log('   Org ID:', orgId || 'all');
+      console.log('   Team ID:', teamId || 'all');
+
+      // ✅ Use real API service
+      const data = await gameService.getGames({
+        org_id: orgId || undefined,
+        team_id: teamId || undefined,
+        status: 'completed' // Only show completed games
+      });
+
+      console.log('✅ Games fetched:', data.length);
+
+      // ✅ Transform API data to match component format
+      const transformedGames = data.map((game: any) => ({
+        id: game.game_id,
+        homeTeam: {
+          id: game.home_team_id,
+          name: game.home_team_name,
+          // Add more team details if available
+        },
+        awayTeam: {
+          id: game.away_team_id,
+          name: game.away_team_name,
+        },
+        date: formatGameDate(game.game_date),
+        score: {
+          home: game.home_score || 0,
+          away: game.away_score || 0,
+        },
+        status: game.status,
+        thumbnail: game.thumbnail_url,
+      }));
+
+      setGames(transformedGames);
+      setUsingMockData(false);
+
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to load games';
+
+      // ✅ Fallback to mock data on error
+      console.error('❌ API fetch failed, using mock data:', err);
+      console.log('📦 Using mock games (API Fallback)');
+      setGames(MOCK_GAMES);
+      setUsingMockData(true);
+      setError('Unable to connect to server. Using sample data.');
+
+      Sentry.captureException(err, {
+        tags: { screen: 'games', action: 'load_games' },
+        extra: {
+          isRefresh,
+          errorMessage: errorMsg
+        }
+      });
+
+      console.error('Error loading games:', err);
+
     } finally {
+      setLoading(false);
       setRefreshing(false);
     }
+  };
+
+  // Helper function to format game dates
+  const formatGameDate = (dateString?: string): string => {
+    if (!dateString) return 'TBD';
+
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    } catch {
+      return 'TBD';
+    }
+  };
+
+  const onRefresh = async () => {
+    await loadGames(true);
   };
 
   const getMockVideoData = (gameId: string) => ({
@@ -69,6 +198,27 @@ export default function RecentGamesScreen() {
     setSelectedVideoGame(game);
     setVideoModalVisible(true);
   };
+
+  // ✅ Loading state
+  if (loading && !refreshing) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: currentColors.background }]}>
+        <View style={styles.loadingContainer}>
+          <LinearGradient
+            colors={Gradients.primary.colors}
+            start={Gradients.primary.start}
+            end={Gradients.primary.end}
+            style={styles.loadingGradient}
+          >
+            <ActivityIndicator size="large" color="#FFFFFF" />
+          </LinearGradient>
+          <Text style={[styles.loadingText, { color: currentColors.text }]}>
+            Loading games...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: currentColors.background }]}>
@@ -131,8 +281,25 @@ export default function RecentGamesScreen() {
         <Animated.View
           entering={FadeInUp.delay(600).duration(400)}
         >
-          <SeasonSummary team={mockTeams[0]} />
+          <SeasonSummary team={selectedTeam || mockTeams[0]} />
         </Animated.View>
+
+        {/* ✅ Mock Data Banner */}
+        {usingMockData && (
+          <Animated.View
+            entering={FadeIn.duration(300)}
+            style={[styles.mockDataBanner, { backgroundColor: currentColors.warning + '15' }]}
+          >
+            <IconSymbol
+              name="info.circle.fill"
+              size={20}
+              color={currentColors.warning}
+            />
+            <Text style={[styles.mockDataText, { color: currentColors.warning }]}>
+              {isDemoMode ? 'Demo Mode - Sample Games' : 'Using sample data - API unavailable'}
+            </Text>
+          </Animated.View>
+        )}
 
         {/* Section Header */}
         <Animated.View entering={FadeInUp.delay(800).springify()}>
@@ -150,7 +317,7 @@ export default function RecentGamesScreen() {
 
         {/* Games List */}
         <View style={styles.gamesContainer}>
-          {mockGames.map((game, index) => (
+          {games.map((game, index) => (
             <Animated.View
               key={game.id}
               entering={SlideInRight.delay(1000 + index * ANIMATION_CONFIG.stagger).springify()}
@@ -191,9 +358,49 @@ export default function RecentGamesScreen() {
   );
 }
 
+export default function RecentGamesScreen() {
+  return (
+    <ComponentErrorBoundary componentName="RecentGamesScreen">
+      <RecentGamesScreenContent />
+    </ComponentErrorBoundary>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingGradient: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  loadingText: {
+    fontSize: Typography.body,
+    fontWeight: '600',
+  },
+  mockDataBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    marginHorizontal: Spacing.xl,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.md,
+    borderRadius: BorderRadius.lg,
+  },
+  mockDataText: {
+    flex: 1,
+    fontSize: Typography.callout,
+    fontWeight: '600',
   },
   headerGradient: {
     paddingVertical: Spacing.lg,

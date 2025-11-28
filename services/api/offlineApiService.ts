@@ -123,6 +123,11 @@ class OfflineApiService {
       keys
     };
   }
+
+  // Alias for clearCache() without parameters for better clarity
+  async clearAllCache(): Promise<void> {
+    return this.clearCache();
+  }
 }
 
 export default new OfflineApiService();
