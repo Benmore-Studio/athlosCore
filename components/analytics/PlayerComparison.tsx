@@ -234,7 +234,7 @@ export default function PlayerComparison({
                         ]}
                         numberOfLines={1}
                       >
-                        {player.name.split(' ')[0]}
+                        {player.name?.split(' ')[0] || player.name || ''}
                       </Text>
                       <Text style={[styles.playerPosition, { color: currentColors.textSecondary }]}>
                         #{player.jersey_number}
@@ -300,7 +300,7 @@ export default function PlayerComparison({
                       style={[styles.playerHeaderName, { color: currentColors.text }]}
                       numberOfLines={1}
                     >
-                      {player.name.split(' ')[0]}
+                      {player.name?.split(' ')[0] || player.name || ''}
                     </Text>
                   </View>
                 </View>
@@ -324,7 +324,7 @@ export default function PlayerComparison({
                   const stats = getPlayerStats(player.id);
                   let value = stats ? (stats[metric.key] as number) : 0;
                   const isHighest = value === maxValue && value > 0;
-                  return `${player.name.split(' ')[0]}: ${value} ${metric.label}${isHighest ? ', highest' : ''}`;
+                  return `${player.name?.split(' ')[0] || player.name || ''}: ${value} ${metric.label}${isHighest ? ', highest' : ''}`;
                 }).join(', ');
                 
                 return (
@@ -441,7 +441,7 @@ export default function PlayerComparison({
                     accessibilityLabel={`Field goal percentage: ${selectedPlayers.map((player, index) => {
                       const stats = getPlayerStats(player.id);
                       const fgPercent = stats ? getFieldGoalPercentage(stats) : 0;
-                      return `${player.name.split(' ')[0]}: ${fgPercent} percent`;
+                      return `${player.name?.split(' ')[0] || player.name || ''}: ${fgPercent} percent`;
                     }).join(', ')}`}
                   >
                     <Text style={[styles.percentageLabel, { color: currentColors.textSecondary }]}>
@@ -478,7 +478,7 @@ export default function PlayerComparison({
                     accessibilityLabel={`Free throw percentage: ${selectedPlayers.map((player, index) => {
                       const stats = getPlayerStats(player.id);
                       const ftPercent = stats ? getFreeThrowPercentage(stats) : 0;
-                      return `${player.name.split(' ')[0]}: ${ftPercent} percent`;
+                      return `${player.name?.split(' ')[0] || player.name || ''}: ${ftPercent} percent`;
                     }).join(', ')}`}
                   >
                     <Text style={[styles.percentageLabel, { color: currentColors.textSecondary }]}>

@@ -1,6 +1,5 @@
 // File: app/(tabs)/teams.tsx
-// Copy this entire file and replace your existing teams.tsx
-
+// Teams Screen - Redesigned to match Dashboard design system
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -12,21 +11,21 @@ import {
   Alert,
   Modal,
   ActivityIndicator,
+  useWindowDimensions,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import Card from '@/components/ui/Card';
-import Button from '@/components/ui/Button';
 import PlayerAvatar from '@/components/ui/PlayerAvatar';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTeamStore, usePlayerStore } from '@/stores';
-import { BorderRadius, Colors, Spacing, Typography, Shadows, Gradients } from '@/constants/theme';
+import { BorderRadius, Colors, Spacing, Typography, Shadows } from '@/constants/theme';
 import Animated, {
   FadeIn,
   FadeInDown,
   FadeInUp,
-  ZoomIn,
+  FadeInRight,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import teamService from '@/services/api/teamService';
@@ -56,23 +55,29 @@ interface PlayerFormData {
 }
 
 export default function TeamsScreen() {
-  const { currentColors, isDark } = useTheme();
+  const { currentColors } = useTheme();
+  const { width, height } = useWindowDimensions();
   const { teams, selectedTeam, setSelectedTeam, loadTeams, setTeams } = useTeamStore();
   const { players, loadPlayers, setPlayers } = usePlayerStore();
-  
+
+  // Responsive breakpoints
+  const isTablet = width >= 768;
+  const isLandscape = width > height;
+
   const [coach, setCoach] = useState<Coach | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [showPlayerModal, setShowPlayerModal] = useState(false);
   const [editingTeam, setEditingTeam] = useState<any>(null);
   const [editingPlayer, setEditingPlayer] = useState<any>(null);
-  
+
   const [teamForm, setTeamForm] = useState<TeamFormData>({
     name: '',
     sport: 'Basketball',
     season: '2024-25',
   });
-  
+
   const [playerForm, setPlayerForm] = useState<PlayerFormData>({
     name: '',
     jersey_number: '',
@@ -105,6 +110,12 @@ export default function TeamsScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadInitialData();
+    setRefreshing(false);
   };
 
   const loadCoachProfile = async () => {
@@ -150,7 +161,6 @@ export default function TeamsScreen() {
 
     try {
       if (editingTeam) {
-        // Update existing team
         const updated = await teamService.updateTeam(editingTeam.id, teamForm);
         const updatedTeams = teams.map(t => t.id === editingTeam.id ? updated : t);
         setTeams(updatedTeams);
@@ -159,7 +169,6 @@ export default function TeamsScreen() {
         }
         Alert.alert('Success', 'Team updated successfully');
       } else {
-        // Create new team
         const newTeam = await teamService.createTeam(teamForm);
         setTeams([...teams, newTeam]);
         if (!selectedTeam) {
@@ -233,7 +242,7 @@ export default function TeamsScreen() {
 
   const handleSavePlayer = async () => {
     if (!selectedTeam) return;
-    
+
     if (!playerForm.name.trim() || !playerForm.jersey_number) {
       Alert.alert('Error', 'Please enter player name and jersey number');
       return;
@@ -250,13 +259,11 @@ export default function TeamsScreen() {
       };
 
       if (editingPlayer) {
-        // Update existing player
         const updated = await playerService.updatePlayer(editingPlayer.id, playerData);
         const updatedPlayers = players.map(p => p.id === editingPlayer.id ? updated : p);
         setPlayers(updatedPlayers);
         Alert.alert('Success', 'Player updated successfully');
       } else {
-        // Create new player
         const newPlayer = await playerService.createPlayer(playerData);
         setPlayers([...players, newPlayer]);
         Alert.alert('Success', 'Player added successfully');
@@ -297,7 +304,7 @@ export default function TeamsScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: currentColors.background }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={currentColors.primary} />
+          <ActivityIndicator size="large" color={Colors.primary} />
           <Text style={[styles.loadingText, { color: currentColors.textSecondary }]}>
             Loading teams...
           </Text>
@@ -308,255 +315,403 @@ export default function TeamsScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: currentColors.background }]}>
-      {/* Header */}
-      <Animated.View entering={FadeInDown.duration(600).springify()}>
-        <LinearGradient
-          colors={[currentColors.headerBackground, currentColors.background]}
-          style={styles.headerGradient}
-        >
-          <View style={styles.headerContent}>
-            <Animated.View entering={FadeIn.delay(200).duration(600)} style={styles.logoContainer}>
-              <LinearGradient
-                colors={Gradients.primary.colors}
-                start={Gradients.primary.start}
-                end={Gradients.primary.end}
-                style={[styles.logoBox, Shadows.primaryGlow]}
-              >
-                <Text style={styles.logoText}>A</Text>
-              </LinearGradient>
-              <View>
-                <Text style={[styles.logoSubtext, { color: currentColors.text }]}>AthlosCore™</Text>
-                <Text style={[styles.logoTagline, { color: currentColors.primary }]}>Teams</Text>
-              </View>
-            </Animated.View>
-
-            {coach && (
-              <Animated.View entering={FadeIn.delay(400).duration(600)}>
-                <PlayerAvatar
-                  name={coach.name}
-                  imageUri={coach.imageUri}
-                  size="medium"
-                  variant="gradient"
-                  showJerseyNumber={false}
-                  online
-                />
-              </Animated.View>
-            )}
+      {/* Header - Matching Dashboard Style */}
+      <Animated.View entering={FadeIn.duration(400)} style={styles.header}>
+        <View style={styles.headerLeft}>
+          <LinearGradient
+            colors={[Colors.primary, '#F59E0B']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.logoBox}
+          >
+            <Text style={styles.logoText}>A</Text>
+          </LinearGradient>
+          <View>
+            <Text style={[styles.headerTitle, { color: currentColors.text }]}>Teams</Text>
+            <Text style={[styles.headerSubtitle, { color: currentColors.textSecondary }]}>
+              {teams.length} {teams.length === 1 ? 'team' : 'teams'}
+            </Text>
           </View>
-        </LinearGradient>
+        </View>
+
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={[styles.headerButton, { backgroundColor: Colors.primary }]}
+            onPress={handleCreateTeam}
+            accessibilityLabel="Add new team"
+          >
+            <IconSymbol name="plus" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
       </Animated.View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Teams Section */}
-        <Animated.View entering={FadeInUp.delay(600).springify()}>
-          <View style={styles.sectionHeader}>
-            <View>
-              <Text style={[styles.sectionTitle, { color: currentColors.text }]}>
-                My Teams
-              </Text>
-              <Text style={[styles.sectionSubtitle, { color: currentColors.textSecondary }]}>
-                {teams.length} {teams.length === 1 ? 'team' : 'teams'}
-              </Text>
-            </View>
-            <Button
-              title="Add Team"
-              onPress={handleCreateTeam}
-              variant="primaryGradient"
-              icon={<IconSymbol name="plus" size={18} color="#FFFFFF" />}
-              size="small"
-            />
-          </View>
-
-          {teams.length === 0 ? (
-            <Card variant="elevated" padding="large" style={styles.emptyCard}>
-              <IconSymbol name="sportscourt.fill" size={48} color={currentColors.textLight} />
-              <Text style={[styles.emptyTitle, { color: currentColors.text }]}>
-                No Teams Yet
-              </Text>
-              <Text style={[styles.emptyMessage, { color: currentColors.textSecondary }]}>
-                Create your first team to get started
-              </Text>
-            </Card>
-          ) : (
-            <View style={styles.teamsList}>
-              {teams.map((team, index) => (
-                <Animated.View
-                  key={team.id}
-                  entering={ZoomIn.delay(800 + index * 100).springify()}
-                >
-                  <Card
-                    variant={selectedTeam?.id === team.id ? "gradient" : "elevated"}
-                    padding="large"
-                    style={styles.teamCard}
-                  >
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        <View style={styles.mainContent}>
+          {/* HERO: Selected Team Card with Navy Gradient */}
+          {selectedTeam ? (
+            <Animated.View entering={FadeInUp.delay(100).duration(400)}>
+              <LinearGradient
+                colors={['#1E2A3A', '#2D3E52']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.heroTeamCard}
+              >
+                <View style={styles.heroTeamHeader}>
+                  <View style={styles.heroTeamInfo}>
+                    <Text style={styles.heroTeamLabel}>Selected Team</Text>
+                    <Text style={styles.heroTeamName}>{selectedTeam.name}</Text>
+                    <Text style={styles.heroTeamMeta}>
+                      {selectedTeam.sport || 'Basketball'} • {selectedTeam.season || '2024-25'}
+                    </Text>
+                  </View>
+                  <View style={styles.heroTeamActions}>
                     <TouchableOpacity
-                      onPress={() => setSelectedTeam(team)}
-                      activeOpacity={0.7}
+                      onPress={() => handleEditTeam(selectedTeam)}
+                      style={styles.heroActionButton}
                     >
-                      <View style={styles.teamCardHeader}>
-                        <View style={styles.teamInfo}>
-                          <Text style={[
-                            styles.teamName,
-                            { color: selectedTeam?.id === team.id ? '#FFFFFF' : currentColors.text }
-                          ]}>
-                            {team.name}
-                          </Text>
-                          <View style={styles.teamMeta}>
-                            <Text style={[
-                              styles.teamMetaText,
-                              { color: selectedTeam?.id === team.id ? '#FFFFFF' : currentColors.textSecondary }
-                            ]}>
-                              {team.sport} • {team.season}
-                            </Text>
-                          </View>
-                        </View>
-                        {selectedTeam?.id === team.id && (
-                          <IconSymbol name="checkmark.circle.fill" size={24} color="#FFFFFF" />
-                        )}
-                      </View>
-
-                      <View style={styles.teamStats}>
-                        <View style={styles.teamStat}>
-                          <Text style={[
-                            styles.teamStatValue,
-                            { color: selectedTeam?.id === team.id ? '#FFFFFF' : currentColors.text }
-                          ]}>
-                            {team.wins || 0}-{team.losses || 0}
-                          </Text>
-                          <Text style={[
-                            styles.teamStatLabel,
-                            { color: selectedTeam?.id === team.id ? '#FFFFFF' : currentColors.textSecondary }
-                          ]}>
-                            Record
-                          </Text>
-                        </View>
-                        <View style={styles.teamStat}>
-                          <Text style={[
-                            styles.teamStatValue,
-                            { color: selectedTeam?.id === team.id ? '#FFFFFF' : currentColors.text }
-                          ]}>
-                            {team.player_count || 0}
-                          </Text>
-                          <Text style={[
-                            styles.teamStatLabel,
-                            { color: selectedTeam?.id === team.id ? '#FFFFFF' : currentColors.textSecondary }
-                          ]}>
-                            Players
-                          </Text>
-                        </View>
-                      </View>
+                      <IconSymbol name="pencil" size={18} color="#FFFFFF" />
                     </TouchableOpacity>
+                  </View>
+                </View>
 
-                    <View style={styles.teamActions}>
+                {/* Stats Row */}
+                <View style={styles.heroStatsRow}>
+                  <View style={styles.heroStat}>
+                    <Text style={styles.heroStatValue}>
+                      {selectedTeam.wins || 0}-{selectedTeam.losses || 0}
+                    </Text>
+                    <Text style={styles.heroStatLabel}>Record</Text>
+                  </View>
+                  <View style={styles.heroStatDivider} />
+                  <View style={styles.heroStat}>
+                    <Text style={styles.heroStatValue}>{players.length}</Text>
+                    <Text style={styles.heroStatLabel}>Players</Text>
+                  </View>
+                  <View style={styles.heroStatDivider} />
+                  <View style={styles.heroStat}>
+                    <Text style={[styles.heroStatValue, { color: Colors.primary }]}>
+                      {selectedTeam.wins && selectedTeam.losses
+                        ? Math.round((selectedTeam.wins / (selectedTeam.wins + selectedTeam.losses)) * 100)
+                        : 0}%
+                    </Text>
+                    <Text style={styles.heroStatLabel}>Win Rate</Text>
+                  </View>
+                </View>
+              </LinearGradient>
+            </Animated.View>
+          ) : (
+            <>
+              {/* Hero Empty State */}
+              <Animated.View entering={FadeInUp.delay(100).duration(400)}>
+                <LinearGradient
+                  colors={['#1E2A3A', '#2D3E52']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.emptyStateHero}
+                >
+                  <View style={[styles.emptyStateHeroContent, isTablet && styles.emptyStateHeroContentTablet]}>
+                    <View style={styles.emptyStateLeft}>
+                      <View style={styles.emptyStateIconContainer}>
+                        <LinearGradient
+                          colors={[Colors.primary, Colors.primaryLight]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.emptyStateIconGradient}
+                        >
+                          <IconSymbol name="sportscourt.fill" size={isTablet ? 48 : 40} color="#FFFFFF" />
+                        </LinearGradient>
+                      </View>
+
+                      <Text style={[styles.emptyStateTitle, isTablet && styles.emptyStateTitleTablet]}>
+                        Welcome to Teams
+                      </Text>
+                      <Text style={[styles.emptyStateDescription, isTablet && styles.emptyStateDescriptionTablet]}>
+                        Create your first team to start managing players, tracking games, and analyzing performance with AI-powered insights
+                      </Text>
+
                       <TouchableOpacity
-                        onPress={() => handleEditTeam(team)}
-                        style={[styles.actionButton, { backgroundColor: currentColors.surface }]}
+                        style={styles.emptyStateCTA}
+                        onPress={handleCreateTeam}
                       >
-                        <IconSymbol name="pencil" size={16} color={currentColors.primary} />
-                        <Text style={[styles.actionButtonText, { color: currentColors.primary }]}>
-                          Edit
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => handleDeleteTeam(team)}
-                        style={[styles.actionButton, { backgroundColor: currentColors.error + '20' }]}
-                      >
-                        <IconSymbol name="trash" size={16} color={currentColors.error} />
-                        <Text style={[styles.actionButtonText, { color: currentColors.error }]}>
-                          Delete
-                        </Text>
+                        <LinearGradient
+                          colors={[Colors.primary, Colors.primaryLight]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.emptyStateCTAGradient}
+                        >
+                          <IconSymbol name="plus" size={20} color="#FFFFFF" />
+                          <Text style={styles.emptyStateCTAText}>Create Your First Team</Text>
+                        </LinearGradient>
                       </TouchableOpacity>
                     </View>
-                  </Card>
-                </Animated.View>
-              ))}
-            </View>
-          )}
-        </Animated.View>
 
-        {/* Players Section */}
-        {selectedTeam && (
-          <Animated.View entering={FadeInUp.delay(1000).springify()}>
-            <View style={styles.sectionHeader}>
-              <View>
-                <Text style={[styles.sectionTitle, { color: currentColors.text }]}>
-                  Roster
-                </Text>
-                <Text style={[styles.sectionSubtitle, { color: currentColors.textSecondary }]}>
-                  {selectedTeam.name}
-                </Text>
-              </View>
-              <Button
-                title="Add Player"
-                onPress={handleAddPlayer}
-                variant="outline"
-                icon={<IconSymbol name="person.badge.plus" size={18} color={currentColors.primary} />}
-                size="small"
-              />
-            </View>
-
-            {players.length === 0 ? (
-              <Card variant="elevated" padding="large" style={styles.emptyCard}>
-                <IconSymbol name="person.3.fill" size={48} color={currentColors.textLight} />
-                <Text style={[styles.emptyTitle, { color: currentColors.text }]}>
-                  No Players Yet
-                </Text>
-                <Text style={[styles.emptyMessage, { color: currentColors.textSecondary }]}>
-                  Add players to your roster
-                </Text>
-              </Card>
-            ) : (
-              <View style={styles.playersList}>
-                {players.map((player, index) => (
-                  <Animated.View
-                    key={player.id}
-                    entering={ZoomIn.delay(1200 + index * 100).springify()}
-                  >
-                    <Card variant="elevated" padding="medium" style={styles.playerCard}>
-                      <View style={styles.playerCardContent}>
-                        <PlayerAvatar
-                          name={player.name}
-                          imageUri={player.imageUri}
-                          jerseyNumber={player.jersey_number}
-                          size="medium"
-                        />
-                        <View style={styles.playerInfo}>
-                          <Text style={[styles.playerName, { color: currentColors.text }]}>
-                            {player.name}
-                          </Text>
-                          <Text style={[styles.playerMeta, { color: currentColors.textSecondary }]}>
-                            #{player.jersey_number} • {player.position}
-                          </Text>
-                          {player.height && player.weight && (
-                            <Text style={[styles.playerDetails, { color: currentColors.textLight }]}>
-                              {player.height} • {player.weight} lbs
-                            </Text>
-                          )}
-                        </View>
-                        <View style={styles.playerActions}>
-                          <TouchableOpacity
-                            onPress={() => handleEditPlayer(player)}
-                            style={styles.iconButton}
-                          >
-                            <IconSymbol name="pencil.circle.fill" size={28} color={currentColors.primary} />
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            onPress={() => handleDeletePlayer(player)}
-                            style={styles.iconButton}
-                          >
-                            <IconSymbol name="trash.circle.fill" size={28} color={currentColors.error} />
-                          </TouchableOpacity>
+                    {isTablet && (
+                      <View style={styles.emptyStateRight}>
+                        <View style={styles.emptyStatsPreview}>
+                          <View style={styles.emptyStatPreviewItem}>
+                            <Text style={styles.emptyStatPreviewValue}>0-0</Text>
+                            <Text style={styles.emptyStatPreviewLabel}>Record</Text>
+                          </View>
+                          <View style={styles.emptyStatDivider} />
+                          <View style={styles.emptyStatPreviewItem}>
+                            <Text style={styles.emptyStatPreviewValue}>0</Text>
+                            <Text style={styles.emptyStatPreviewLabel}>Players</Text>
+                          </View>
+                          <View style={styles.emptyStatDivider} />
+                          <View style={styles.emptyStatPreviewItem}>
+                            <Text style={[styles.emptyStatPreviewValue, { color: Colors.primary }]}>0%</Text>
+                            <Text style={styles.emptyStatPreviewLabel}>Win Rate</Text>
+                          </View>
                         </View>
                       </View>
-                    </Card>
-                  </Animated.View>
-                ))}
-              </View>
-            )}
-          </Animated.View>
-        )}
+                    )}
+                  </View>
+                </LinearGradient>
+              </Animated.View>
 
-        <View style={styles.bottomSpacing} />
+              {/* Feature Cards */}
+              <Animated.View entering={FadeInUp.delay(200).duration(400)} style={styles.sectionContainer}>
+                <View style={[styles.sectionCard, { backgroundColor: currentColors.cardBackground }]}>
+                  <View style={styles.sectionHeader}>
+                    <View style={styles.sectionHeaderLeft}>
+                      <View style={[styles.sectionIcon, { backgroundColor: Colors.primary + '15' }]}>
+                        <IconSymbol name="star.fill" size={18} color={Colors.primary} />
+                      </View>
+                      <Text style={[styles.sectionTitle, { color: currentColors.text }]}>What You Can Do</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.featureGrid}>
+                    <View style={styles.featureRow}>
+                      <Animated.View entering={FadeInUp.delay(250).duration(400)} style={styles.featureCardWrapper}>
+                        <View style={[styles.featureCard, { backgroundColor: currentColors.surface }]}>
+                          <View style={[styles.featureIconLarge, { backgroundColor: Colors.primary + '15' }]}>
+                            <IconSymbol name="person.3.fill" size={28} color={Colors.primary} />
+                          </View>
+                          <Text style={[styles.featureCardTitle, { color: currentColors.text }]}>
+                            Manage Roster
+                          </Text>
+                          <Text style={[styles.featureCardDescription, { color: currentColors.textSecondary }]}>
+                            Add players, track positions, jersey numbers, and build your complete team roster
+                          </Text>
+                        </View>
+                      </Animated.View>
+
+                      <Animated.View entering={FadeInUp.delay(300).duration(400)} style={styles.featureCardWrapper}>
+                        <View style={[styles.featureCard, { backgroundColor: currentColors.surface }]}>
+                          <View style={[styles.featureIconLarge, { backgroundColor: Colors.info + '15' }]}>
+                            <IconSymbol name="chart.bar.fill" size={28} color={Colors.info} />
+                          </View>
+                          <Text style={[styles.featureCardTitle, { color: currentColors.text }]}>
+                            Track Performance
+                          </Text>
+                          <Text style={[styles.featureCardDescription, { color: currentColors.textSecondary }]}>
+                            Monitor player stats, game results, and see detailed performance analytics over time
+                          </Text>
+                        </View>
+                      </Animated.View>
+                    </View>
+
+                    <View style={styles.featureRow}>
+                      <Animated.View entering={FadeInUp.delay(350).duration(400)} style={styles.featureCardWrapper}>
+                        <View style={[styles.featureCard, { backgroundColor: currentColors.surface }]}>
+                          <View style={[styles.featureIconLarge, { backgroundColor: Colors.success + '15' }]}>
+                            <IconSymbol name="video.fill" size={28} color={Colors.success} />
+                          </View>
+                          <Text style={[styles.featureCardTitle, { color: currentColors.text }]}>
+                            AI Video Analysis
+                          </Text>
+                          <Text style={[styles.featureCardDescription, { color: currentColors.textSecondary }]}>
+                            Upload game footage and get AI-powered insights, highlights, and coaching recommendations
+                          </Text>
+                        </View>
+                      </Animated.View>
+
+                      <Animated.View entering={FadeInUp.delay(400).duration(400)} style={styles.featureCardWrapper}>
+                        <View style={[styles.featureCard, { backgroundColor: currentColors.surface }]}>
+                          <View style={[styles.featureIconLarge, { backgroundColor: Colors.warning + '15' }]}>
+                            <IconSymbol name="lightbulb.fill" size={28} color={Colors.warning} />
+                          </View>
+                          <Text style={[styles.featureCardTitle, { color: currentColors.text }]}>
+                            Get AI Insights
+                          </Text>
+                          <Text style={[styles.featureCardDescription, { color: currentColors.textSecondary }]}>
+                            Receive personalized coaching tips and strategic insights based on your team's data
+                          </Text>
+                        </View>
+                      </Animated.View>
+                    </View>
+                  </View>
+                </View>
+              </Animated.View>
+            </>
+          )}
+
+          {/* Other Teams Section */}
+          {teams.length > 1 && (
+            <Animated.View entering={FadeInUp.delay(200).duration(400)} style={styles.sectionContainer}>
+              <View style={[styles.sectionCard, { backgroundColor: currentColors.cardBackground }]}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionHeaderLeft}>
+                    <View style={[styles.sectionIcon, { backgroundColor: Colors.headerBackground + '15' }]}>
+                      <IconSymbol name="sportscourt.fill" size={18} color={Colors.headerBackground} />
+                    </View>
+                    <Text style={[styles.sectionTitle, { color: currentColors.text }]}>All Teams</Text>
+                  </View>
+                </View>
+
+                <View style={[styles.teamsGrid, isTablet && styles.teamsGridTablet]}>
+                  {teams.filter(t => t.id !== selectedTeam?.id).map((team, index) => (
+                    <Animated.View
+                      key={team.id}
+                      entering={FadeInRight.delay(250 + index * 50).duration(300)}
+                    >
+                      <TouchableOpacity
+                        style={[
+                          styles.teamCard,
+                          { backgroundColor: currentColors.surface },
+                          isTablet && styles.teamCardTablet
+                        ]}
+                        onPress={() => setSelectedTeam(team)}
+                      >
+                        <View style={styles.teamCardContent}>
+                          <View style={styles.teamCardInfo}>
+                            <Text style={[styles.teamCardName, { color: currentColors.text }]} numberOfLines={1}>
+                              {team.name}
+                            </Text>
+                            <Text style={[styles.teamCardMeta, { color: currentColors.textSecondary }]}>
+                              {team.wins || 0}-{team.losses || 0} • {team.player_count || 0} players
+                            </Text>
+                          </View>
+                          <IconSymbol name="chevron.right" size={16} color={currentColors.textLight} />
+                        </View>
+                      </TouchableOpacity>
+                    </Animated.View>
+                  ))}
+                </View>
+              </View>
+            </Animated.View>
+          )}
+
+          {/* Roster Section */}
+          {selectedTeam && (
+            <Animated.View entering={FadeInUp.delay(300).duration(400)} style={styles.sectionContainer}>
+              <View style={[styles.sectionCard, { backgroundColor: currentColors.cardBackground }]}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionHeaderLeft}>
+                    <View style={[styles.sectionIcon, { backgroundColor: Colors.primary + '15' }]}>
+                      <IconSymbol name="person.3.fill" size={18} color={Colors.primary} />
+                    </View>
+                    <Text style={[styles.sectionTitle, { color: currentColors.text }]}>Roster</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={handleAddPlayer}
+                    style={[styles.addButton, { backgroundColor: Colors.primary }]}
+                  >
+                    <IconSymbol name="plus" size={16} color="#FFFFFF" />
+                    <Text style={styles.addButtonText}>Add Player</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {players.length === 0 ? (
+                  <View style={styles.emptyRoster}>
+                    <IconSymbol name="person.badge.plus" size={40} color={currentColors.textLight} />
+                    <Text style={[styles.emptyText, { color: currentColors.textSecondary }]}>
+                      No players on roster yet
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    {/* Table Header for Tablet */}
+                    {isTablet && (
+                      <View style={styles.rosterHeaderRow}>
+                        <Text style={[styles.rosterHeaderText, { color: currentColors.textSecondary, width: 32 }]}>#</Text>
+                        <Text style={[styles.rosterHeaderText, { color: currentColors.textSecondary, flex: 1, marginLeft: 56 }]}>Player</Text>
+                        <Text style={[styles.rosterHeaderText, { color: currentColors.textSecondary, width: 60, textAlign: 'center' }]}>POS</Text>
+                        <Text style={[styles.rosterHeaderText, { color: currentColors.textSecondary, width: 80, textAlign: 'center' }]}>Height</Text>
+                        <Text style={[styles.rosterHeaderText, { color: currentColors.textSecondary, width: 80, textAlign: 'center' }]}>Weight</Text>
+                        <Text style={[styles.rosterHeaderText, { color: currentColors.textSecondary, width: 80, textAlign: 'center' }]}>Actions</Text>
+                      </View>
+                    )}
+
+                    {players.map((player, index) => (
+                      <Animated.View
+                        key={player.id}
+                        entering={FadeInUp.delay(350 + index * 30).duration(300)}
+                      >
+                        <View
+                          style={[
+                            styles.playerRow,
+                            index < players.length - 1 && { borderBottomWidth: 1, borderBottomColor: currentColors.border }
+                          ]}
+                        >
+                          <View style={[styles.jerseyBadge, { backgroundColor: Colors.primary + '15' }]}>
+                            <Text style={[styles.jerseyNumber, { color: Colors.primary }]}>
+                              {player.jersey_number}
+                            </Text>
+                          </View>
+                          <PlayerAvatar
+                            name={player.name}
+                            imageUri={player.imageUri}
+                            jerseyNumber={player.jersey_number}
+                            size="small"
+                            variant="default"
+                          />
+                          <View style={styles.playerInfo}>
+                            <Text style={[styles.playerName, { color: currentColors.text }]} numberOfLines={1}>
+                              {player.name}
+                            </Text>
+                            {!isTablet && (
+                              <Text style={[styles.playerMeta, { color: currentColors.textSecondary }]}>
+                                {player.position} {player.height ? `• ${player.height}` : ''}
+                              </Text>
+                            )}
+                          </View>
+                          {isTablet && (
+                            <>
+                              <Text style={[styles.playerPosText, { color: currentColors.textSecondary }]}>
+                                {player.position || '-'}
+                              </Text>
+                              <Text style={[styles.playerStatText, { color: currentColors.text }]}>
+                                {player.height || '-'}
+                              </Text>
+                              <Text style={[styles.playerStatText, { color: currentColors.text }]}>
+                                {player.weight ? `${player.weight} lbs` : '-'}
+                              </Text>
+                            </>
+                          )}
+                          <View style={styles.playerActions}>
+                            <TouchableOpacity
+                              onPress={() => handleEditPlayer(player)}
+                              style={[styles.actionIconButton, { backgroundColor: Colors.primary + '15' }]}
+                            >
+                              <IconSymbol name="pencil" size={14} color={Colors.primary} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() => handleDeletePlayer(player)}
+                              style={[styles.actionIconButton, { backgroundColor: Colors.error + '15' }]}
+                            >
+                              <IconSymbol name="trash" size={14} color={Colors.error} />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </Animated.View>
+                    ))}
+                  </>
+                )}
+              </View>
+            </Animated.View>
+          )}
+        </View>
+
+        {/* Bottom spacing */}
+        <View style={{ height: Spacing.xxl }} />
       </ScrollView>
 
       {/* Team Modal */}
@@ -567,24 +722,29 @@ export default function TeamsScreen() {
         onRequestClose={() => setShowTeamModal(false)}
       >
         <SafeAreaView style={[styles.modalContainer, { backgroundColor: currentColors.background }]}>
-          <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { color: currentColors.text }]}>
-              {editingTeam ? 'Edit Team' : 'Create Team'}
-            </Text>
+          <View style={[styles.modalHeader, { borderBottomColor: currentColors.border }]}>
             <TouchableOpacity onPress={() => setShowTeamModal(false)}>
-              <IconSymbol name="xmark.circle.fill" size={28} color={currentColors.textSecondary} />
+              <Text style={[styles.modalCancel, { color: currentColors.textSecondary }]}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: currentColors.text }]}>
+              {editingTeam ? 'Edit Team' : 'New Team'}
+            </Text>
+            <TouchableOpacity onPress={handleSaveTeam}>
+              <Text style={[styles.modalSave, { color: Colors.primary }]}>
+                {editingTeam ? 'Update' : 'Create'}
+              </Text>
             </TouchableOpacity>
           </View>
 
-          <ScrollView 
-            style={styles.modalContent} 
+          <ScrollView
+            style={styles.modalContent}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.modalScrollContent}
           >
             <View style={styles.formGroup}>
-              <Text style={[styles.formLabel, { color: currentColors.text }]}>Team Name *</Text>
+              <Text style={[styles.formLabel, { color: currentColors.text }]}>Team Name</Text>
               <TextInput
-                style={[styles.input, { 
+                style={[styles.input, {
                   backgroundColor: currentColors.surface,
                   color: currentColors.text,
                   borderColor: currentColors.border
@@ -598,21 +758,21 @@ export default function TeamsScreen() {
 
             <View style={styles.formGroup}>
               <Text style={[styles.formLabel, { color: currentColors.text }]}>Sport</Text>
-              <View style={styles.optionsGrid}>
-                {sports.map((sport) => (
+              <View style={styles.optionsRow}>
+                {sports.slice(0, 3).map((sport) => (
                   <TouchableOpacity
                     key={sport}
                     onPress={() => setTeamForm({ ...teamForm, sport })}
                     style={[
-                      styles.optionButton,
-                      { 
-                        backgroundColor: teamForm.sport === sport ? currentColors.primary : currentColors.surface,
-                        borderColor: currentColors.border
+                      styles.optionChip,
+                      {
+                        backgroundColor: teamForm.sport === sport ? Colors.primary : currentColors.surface,
+                        borderColor: teamForm.sport === sport ? Colors.primary : currentColors.border
                       }
                     ]}
                   >
                     <Text style={[
-                      styles.optionText,
+                      styles.optionChipText,
                       { color: teamForm.sport === sport ? '#FFFFFF' : currentColors.text }
                     ]}>
                       {sport}
@@ -625,7 +785,7 @@ export default function TeamsScreen() {
             <View style={styles.formGroup}>
               <Text style={[styles.formLabel, { color: currentColors.text }]}>Season</Text>
               <TextInput
-                style={[styles.input, { 
+                style={[styles.input, {
                   backgroundColor: currentColors.surface,
                   color: currentColors.text,
                   borderColor: currentColors.border
@@ -636,22 +796,20 @@ export default function TeamsScreen() {
                 placeholderTextColor={currentColors.textLight}
               />
             </View>
-          </ScrollView>
 
-          <View style={styles.modalActions}>
-            <Button
-              title="Cancel"
-              onPress={() => setShowTeamModal(false)}
-              variant="ghost"
-              style={styles.modalButton}
-            />
-            <Button
-              title={editingTeam ? 'Update' : 'Create'}
-              onPress={handleSaveTeam}
-              variant="primaryGradient"
-              style={styles.modalButton}
-            />
-          </View>
+            {editingTeam && (
+              <TouchableOpacity
+                onPress={() => {
+                  setShowTeamModal(false);
+                  handleDeleteTeam(editingTeam);
+                }}
+                style={[styles.deleteButton, { backgroundColor: Colors.error + '15' }]}
+              >
+                <IconSymbol name="trash" size={18} color={Colors.error} />
+                <Text style={[styles.deleteButtonText, { color: Colors.error }]}>Delete Team</Text>
+              </TouchableOpacity>
+            )}
+          </ScrollView>
         </SafeAreaView>
       </Modal>
 
@@ -663,24 +821,29 @@ export default function TeamsScreen() {
         onRequestClose={() => setShowPlayerModal(false)}
       >
         <SafeAreaView style={[styles.modalContainer, { backgroundColor: currentColors.background }]}>
-          <View style={styles.modalHeader}>
+          <View style={[styles.modalHeader, { borderBottomColor: currentColors.border }]}>
+            <TouchableOpacity onPress={() => setShowPlayerModal(false)}>
+              <Text style={[styles.modalCancel, { color: currentColors.textSecondary }]}>Cancel</Text>
+            </TouchableOpacity>
             <Text style={[styles.modalTitle, { color: currentColors.text }]}>
               {editingPlayer ? 'Edit Player' : 'Add Player'}
             </Text>
-            <TouchableOpacity onPress={() => setShowPlayerModal(false)}>
-              <IconSymbol name="xmark.circle.fill" size={28} color={currentColors.textSecondary} />
+            <TouchableOpacity onPress={handleSavePlayer}>
+              <Text style={[styles.modalSave, { color: Colors.primary }]}>
+                {editingPlayer ? 'Update' : 'Add'}
+              </Text>
             </TouchableOpacity>
           </View>
 
-          <ScrollView 
-            style={styles.modalContent} 
+          <ScrollView
+            style={styles.modalContent}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.modalScrollContent}
           >
             <View style={styles.formGroup}>
-              <Text style={[styles.formLabel, { color: currentColors.text }]}>Player Name *</Text>
+              <Text style={[styles.formLabel, { color: currentColors.text }]}>Player Name</Text>
               <TextInput
-                style={[styles.input, { 
+                style={[styles.input, {
                   backgroundColor: currentColors.surface,
                   color: currentColors.text,
                   borderColor: currentColors.border
@@ -694,9 +857,9 @@ export default function TeamsScreen() {
 
             <View style={styles.formRow}>
               <View style={[styles.formGroup, { flex: 1 }]}>
-                <Text style={[styles.formLabel, { color: currentColors.text }]}>Jersey # *</Text>
+                <Text style={[styles.formLabel, { color: currentColors.text }]}>Jersey #</Text>
                 <TextInput
-                  style={[styles.input, { 
+                  style={[styles.input, {
                     backgroundColor: currentColors.surface,
                     color: currentColors.text,
                     borderColor: currentColors.border
@@ -709,7 +872,7 @@ export default function TeamsScreen() {
                 />
               </View>
 
-              <View style={[styles.formGroup, { flex: 1 }]}>
+              <View style={[styles.formGroup, { flex: 2 }]}>
                 <Text style={[styles.formLabel, { color: currentColors.text }]}>Position</Text>
                 <View style={styles.positionsRow}>
                   {positions.map((pos) => (
@@ -717,15 +880,15 @@ export default function TeamsScreen() {
                       key={pos}
                       onPress={() => setPlayerForm({ ...playerForm, position: pos })}
                       style={[
-                        styles.positionButton,
-                        { 
-                          backgroundColor: playerForm.position === pos ? currentColors.primary : currentColors.surface,
-                          borderColor: currentColors.border
+                        styles.positionChip,
+                        {
+                          backgroundColor: playerForm.position === pos ? Colors.primary : currentColors.surface,
+                          borderColor: playerForm.position === pos ? Colors.primary : currentColors.border
                         }
                       ]}
                     >
                       <Text style={[
-                        styles.positionText,
+                        styles.positionChipText,
                         { color: playerForm.position === pos ? '#FFFFFF' : currentColors.text }
                       ]}>
                         {pos}
@@ -740,7 +903,7 @@ export default function TeamsScreen() {
               <View style={[styles.formGroup, { flex: 1 }]}>
                 <Text style={[styles.formLabel, { color: currentColors.text }]}>Height</Text>
                 <TextInput
-                  style={[styles.input, { 
+                  style={[styles.input, {
                     backgroundColor: currentColors.surface,
                     color: currentColors.text,
                     borderColor: currentColors.border
@@ -755,7 +918,7 @@ export default function TeamsScreen() {
               <View style={[styles.formGroup, { flex: 1 }]}>
                 <Text style={[styles.formLabel, { color: currentColors.text }]}>Weight (lbs)</Text>
                 <TextInput
-                  style={[styles.input, { 
+                  style={[styles.input, {
                     backgroundColor: currentColors.surface,
                     color: currentColors.text,
                     borderColor: currentColors.border
@@ -768,22 +931,20 @@ export default function TeamsScreen() {
                 />
               </View>
             </View>
-          </ScrollView>
 
-          <View style={styles.modalActions}>
-            <Button
-              title="Cancel"
-              onPress={() => setShowPlayerModal(false)}
-              variant="ghost"
-              style={styles.modalButton}
-            />
-            <Button
-              title={editingPlayer ? 'Update' : 'Add'}
-              onPress={handleSavePlayer}
-              variant="primaryGradient"
-              style={styles.modalButton}
-            />
-          </View>
+            {editingPlayer && (
+              <TouchableOpacity
+                onPress={() => {
+                  setShowPlayerModal(false);
+                  handleDeletePlayer(editingPlayer);
+                }}
+                style={[styles.deleteButton, { backgroundColor: Colors.error + '15' }]}
+              >
+                <IconSymbol name="trash" size={18} color={Colors.error} />
+                <Text style={[styles.deleteButtonText, { color: Colors.error }]}>Remove Player</Text>
+              </TouchableOpacity>
+            )}
+          </ScrollView>
         </SafeAreaView>
       </Modal>
     </SafeAreaView>
@@ -804,178 +965,437 @@ const styles = StyleSheet.create({
     fontSize: Typography.callout,
     fontWeight: '600',
   },
-  headerGradient: {
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.xl,
-  },
-  headerContent: {
+
+  // Header - Matching Dashboard
+  header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
-  logoContainer: {
+  headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    gap: Spacing.md,
   },
   logoBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.small,
+  },
+  logoText: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#FFFFFF',
+  },
+  headerTitle: {
+    fontSize: Typography.headline,
+    fontWeight: '700',
+  },
+  headerSubtitle: {
+    fontSize: Typography.footnote,
+    fontWeight: '500',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  headerButton: {
     width: 40,
     height: 40,
-    borderRadius: BorderRadius.sm,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.small,
+  },
+
+  // Content
+  content: {
+    flex: 1,
+  },
+  mainContent: {
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.md,
+  },
+
+  // Hero Team Card - Navy Gradient
+  heroTeamCard: {
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.lg,
+    ...Shadows.medium,
+  },
+  heroTeamHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: Spacing.lg,
+  },
+  heroTeamInfo: {
+    flex: 1,
+  },
+  heroTeamLabel: {
+    fontSize: Typography.footnote,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.6)',
+    marginBottom: 4,
+  },
+  heroTeamName: {
+    fontSize: Typography.title2,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  heroTeamMeta: {
+    fontSize: Typography.footnote,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.6)',
+  },
+  heroTeamActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  heroActionButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoText: {
-    fontSize: Typography.title2,
-    fontWeight: '900',
-    color: Colors.textOnPrimary,
+  heroStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
   },
-  logoSubtext: {
-    fontSize: Typography.callout,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  logoTagline: {
-    fontSize: Typography.caption,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-    marginTop: 2,
-  },
-  content: {
+  heroStat: {
+    alignItems: 'center',
     flex: 1,
+  },
+  heroStatValue: {
+    fontSize: Typography.title3,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  heroStatLabel: {
+    fontSize: Typography.caption,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.6)',
+    marginTop: 4,
+  },
+  heroStatDivider: {
+    width: 1,
+    height: 36,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+
+  // Empty State - Hero Section
+  emptyStateHero: {
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    ...Shadows.medium,
+  },
+  emptyStateHeroContent: {
+    alignItems: 'center',
+  },
+  emptyStateHeroContentTablet: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  emptyStateLeft: {
+    flex: 1,
+    alignItems: 'flex-start',
+  },
+  emptyStateRight: {
+    marginLeft: Spacing.xl,
+    minWidth: 280,
+  },
+  emptyStateIconContainer: {
+    marginBottom: Spacing.lg,
+  },
+  emptyStateIconGradient: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.primaryGlow,
+  },
+  emptyStateTitle: {
+    fontSize: Typography.title2,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: Spacing.sm,
+    textAlign: 'center',
+  },
+  emptyStateTitleTablet: {
+    fontSize: Typography.title1,
+    textAlign: 'left',
+  },
+  emptyStateDescription: {
+    fontSize: Typography.subhead,
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'center',
+    marginBottom: Spacing.xl,
+    lineHeight: Typography.subhead * 1.5,
+  },
+  emptyStateDescriptionTablet: {
+    fontSize: Typography.body,
+    textAlign: 'left',
+    maxWidth: 500,
+  },
+  emptyStatsPreview: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+  },
+  emptyStatPreviewItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  emptyStatPreviewValue: {
+    fontSize: Typography.title2,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  emptyStatPreviewLabel: {
+    fontSize: Typography.caption,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.6)',
+    marginTop: 4,
+  },
+  emptyStatDivider: {
+    width: 1,
+    height: 36,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  emptyStateCTA: {
+    borderRadius: BorderRadius.lg,
+    overflow: 'hidden',
+    ...Shadows.medium,
+  },
+  emptyStateCTAGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+  },
+  emptyStateCTAText: {
+    fontSize: Typography.subhead,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+
+  // Feature Cards - 2x2 Grid
+  featureGrid: {
+    gap: Spacing.md,
+    alignItems: 'center',
+  },
+  featureRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: Spacing.md,
+    width: '100%',
+    marginBottom: Spacing.md,
+  },
+  featureCardWrapper: {
+    width: '46%',
+    maxWidth: 400,
+  },
+  featureCard: {
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    gap: Spacing.sm,
+    minHeight: 180,
+  },
+  featureIconLarge: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.xs,
+  },
+  featureCardTitle: {
+    fontSize: Typography.subhead,
+    fontWeight: '700',
+  },
+  featureCardDescription: {
+    fontSize: Typography.footnote,
+    lineHeight: Typography.footnote * 1.5,
+  },
+
+  // Section Container
+  sectionContainer: {
+    marginTop: Spacing.sm,
+  },
+  sectionCard: {
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.lg,
+    ...Shadows.small,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
-    marginTop: Spacing.xl,
     marginBottom: Spacing.md,
   },
-  sectionTitle: {
-    fontSize: Typography.title3,
-    fontWeight: '700',
-  },
-  sectionSubtitle: {
-    fontSize: Typography.callout,
-    fontWeight: '500',
-    marginTop: Spacing.xs / 2,
-  },
-  emptyCard: {
-    marginHorizontal: Spacing.xl,
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  emptyTitle: {
-    fontSize: Typography.headline,
-    fontWeight: '700',
-  },
-  emptyMessage: {
-    fontSize: Typography.callout,
-    textAlign: 'center',
-  },
-  teamsList: {
-    paddingHorizontal: Spacing.xl,
-    gap: Spacing.md,
-  },
-  teamCard: {
-    overflow: 'hidden',
-  },
-  teamCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-  },
-  teamInfo: {
-    flex: 1,
-  },
-  teamName: {
-    fontSize: Typography.headline,
-    fontWeight: '700',
-    marginBottom: Spacing.xs / 2,
-  },
-  teamMeta: {
+  sectionHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  teamMetaText: {
-    fontSize: Typography.callout,
-    fontWeight: '500',
-  },
-  teamStats: {
-    flexDirection: 'row',
-    gap: Spacing.xl,
-    marginBottom: Spacing.md,
-  },
-  teamStat: {
-    alignItems: 'center',
-  },
-  teamStatValue: {
-    fontSize: Typography.title3,
-    fontWeight: '700',
-  },
-  teamStatLabel: {
-    fontSize: Typography.caption,
-    fontWeight: '600',
-    marginTop: Spacing.xs / 2,
-  },
-  teamActions: {
-    flexDirection: 'row',
     gap: Spacing.sm,
-    paddingTop: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
   },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
+  sectionIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  sectionTitle: {
+    fontSize: Typography.headline,
+    fontWeight: '700',
+  },
+
+  // Add Button
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     borderRadius: BorderRadius.md,
   },
-  actionButtonText: {
-    fontSize: Typography.callout,
+  addButtonText: {
+    fontSize: Typography.subhead,
     fontWeight: '600',
+    color: '#FFFFFF',
   },
-  playersList: {
-    paddingHorizontal: Spacing.xl,
+
+  // Teams Grid
+  teamsGrid: {
     gap: Spacing.sm,
   },
-  playerCard: {
-    overflow: 'hidden',
+  teamsGridTablet: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
   },
-  playerCardContent: {
+  teamCard: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
+  },
+  teamCardTablet: {
+    width: '48%',
+    marginRight: '2%',
+    marginBottom: Spacing.sm,
+  },
+  teamCardContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
+    justifyContent: 'space-between',
+  },
+  teamCardInfo: {
+    flex: 1,
+  },
+  teamCardName: {
+    fontSize: Typography.subhead,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  teamCardMeta: {
+    fontSize: Typography.footnote,
+  },
+
+  // Roster
+  rosterHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.xs,
+    marginBottom: Spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  rosterHeaderText: {
+    fontSize: Typography.caption,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  playerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+    gap: Spacing.sm,
+  },
+  jerseyBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  jerseyNumber: {
+    fontSize: Typography.footnote,
+    fontWeight: '700',
   },
   playerInfo: {
     flex: 1,
   },
   playerName: {
-    fontSize: Typography.callout,
-    fontWeight: '700',
-    marginBottom: Spacing.xs / 2,
+    fontSize: Typography.subhead,
+    fontWeight: '600',
   },
   playerMeta: {
     fontSize: Typography.footnote,
-    fontWeight: '600',
+    marginTop: 2,
   },
-  playerDetails: {
-    fontSize: Typography.footnote,
-    marginTop: Spacing.xs / 2,
+  playerPosText: {
+    width: 60,
+    fontSize: Typography.subhead,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  playerStatText: {
+    width: 80,
+    fontSize: Typography.subhead,
+    fontWeight: '500',
+    textAlign: 'center',
   },
   playerActions: {
     flexDirection: 'row',
+    gap: Spacing.xs,
+    width: 80,
+    justifyContent: 'center',
+  },
+  actionIconButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Empty States
+  emptyRoster: {
+    alignItems: 'center',
+    padding: Spacing.xl,
     gap: Spacing.sm,
   },
-  iconButton: {
-    padding: Spacing.xs / 2,
+  emptyText: {
+    fontSize: Typography.subhead,
   },
+
+  // Modal Styles
   modalContainer: {
     flex: 1,
   },
@@ -983,28 +1403,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  modalCancel: {
+    fontSize: Typography.subhead,
+    fontWeight: '500',
   },
   modalTitle: {
-    fontSize: Typography.title2,
+    fontSize: Typography.headline,
     fontWeight: '700',
+  },
+  modalSave: {
+    fontSize: Typography.subhead,
+    fontWeight: '600',
   },
   modalContent: {
     flex: 1,
   },
   modalScrollContent: {
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.md,
+    padding: Spacing.lg,
   },
   formGroup: {
     marginBottom: Spacing.lg,
   },
   formLabel: {
-    fontSize: Typography.callout,
+    fontSize: Typography.subhead,
     fontWeight: '600',
     marginBottom: Spacing.sm,
   },
@@ -1020,884 +1445,46 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.md,
   },
-  optionsGrid: {
+  optionsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: Spacing.sm,
-    marginTop: Spacing.xs,
   },
-  optionButton: {
+  optionChip: {
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
-    minWidth: 100,
-    alignItems: 'center',
   },
-  optionText: {
-    fontSize: Typography.callout,
+  optionChipText: {
+    fontSize: Typography.subhead,
     fontWeight: '600',
   },
   positionsRow: {
     flexDirection: 'row',
     gap: Spacing.xs,
     flexWrap: 'wrap',
-    marginTop: Spacing.sm,
   },
-  positionButton: {
+  positionChip: {
     paddingHorizontal: Spacing.sm,
     paddingVertical: Spacing.xs,
     borderRadius: BorderRadius.sm,
     borderWidth: 1,
   },
-  positionText: {
+  positionChipText: {
     fontSize: Typography.footnote,
     fontWeight: '700',
   },
-  modalActions: {
+  deleteButton: {
     flexDirection: 'row',
-    gap: Spacing.md,
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.lg,
-    paddingBottom: Spacing.xl,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginTop: Spacing.lg,
   },
-  modalButton: {
-    flex: 1,
-  },
-  bottomSpacing: {
-    height: Spacing.xxxl,
+  deleteButtonText: {
+    fontSize: Typography.subhead,
+    fontWeight: '600',
   },
 });
-
-
-// import Button from '@/components/ui/button';
-// import Card from '@/components/ui/card';
-// import { IconSymbol } from '@/components/ui/icon-symbol';
-// import PlayerAvatar from '@/components/ui/playerAvatar';
-// import ProgressIndicator from '@/components/ui/progressIndicator';
-// import { BorderRadius, Colors, DarkColors, Layout, Spacing, Typography, Shadows, Gradients, Animation } from '@/constants/theme';
-// import { mockCoach, mockTeams } from '@/data/mockData';
-// import { useResponsive } from '@/hooks/useResponsive';
-// import { useColorScheme } from '@/hooks/use-color-scheme';
-// import React, { useState } from 'react';
-// import {
-//   ScrollView,
-//   StyleSheet,
-//   Text,
-//   TouchableOpacity,
-//   View,
-//   Pressable,
-// } from 'react-native';
-// import { SafeAreaView } from 'react-native-safe-area-context';
-// import Animated, {
-//   FadeIn,
-//   FadeInDown,
-//   FadeInUp,
-//   SlideInRight,
-//   ZoomIn,
-//   useAnimatedStyle,
-//   useSharedValue,
-//   withSpring,
-// } from 'react-native-reanimated';
-// import { LinearGradient } from 'expo-linear-gradient';
-// import { BlurView } from 'expo-blur';
-
-// const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-// export default function TeamSelectionScreen() {
-//   const [selectedTeamId, setSelectedTeamId] = useState(mockTeams[0].id);
-//   const { isTablet, isLandscape } = useResponsive();
-//   const theme = useColorScheme() ?? 'light';
-//   const isDark = theme === 'dark';
-//   const currentColors = isDark ? DarkColors : Colors;
-
-//   const scale = useSharedValue(1);
-//   const selectedTeam = mockTeams.find(team => team.id === selectedTeamId);
-
-//   const handleTeamSelect = (teamId: string) => {
-//     setSelectedTeamId(teamId);
-//   };
-
-//   const handleContinue = () => {
-//     console.log('Continue with team:', selectedTeamId);
-//   };
-
-//   const handlePressIn = () => {
-//     scale.value = withSpring(Animation.scale.press, Animation.spring.snappy);
-//   };
-
-//   const handlePressOut = () => {
-//     scale.value = withSpring(1, Animation.spring.bouncy);
-//   };
-
-//   const buttonAnimatedStyle = useAnimatedStyle(() => ({
-//     transform: [{ scale: scale.value }],
-//   }));
-
-//   const getWinPercentage = (team: typeof mockTeams[0]) => {
-//     return (team.record.wins / (team.record.wins + team.record.losses)) * 100;
-//   };
-
-//   return (
-//     <SafeAreaView style={[styles.container, { backgroundColor: currentColors.background }]}>
-//       {/* Animated Header */}
-//       <Animated.View entering={FadeInDown.duration(600).springify()}>
-//         <LinearGradient
-//           colors={[currentColors.headerBackground, currentColors.background]}
-//           style={styles.headerGradient}
-//         >
-//           <View style={styles.headerContent}>
-//             <Animated.View entering={FadeIn.delay(200).duration(600)} style={styles.logoContainer}>
-//               <LinearGradient
-//                 colors={Gradients.primary.colors}
-//                 start={Gradients.primary.start}
-//                 end={Gradients.primary.end}
-//                 style={[styles.logoBox, Shadows.primaryGlow]}
-//               >
-//                 <Text style={styles.logoText}>A</Text>
-//               </LinearGradient>
-//               <View>
-//                 <Text style={[styles.logoSubtext, { color: currentColors.text }]}>AthlosCore™</Text>
-//                 <Text style={[styles.logoTagline, { color: currentColors.primary }]}>Team Selection</Text>
-//               </View>
-//             </Animated.View>
-
-//             <Animated.View entering={FadeIn.delay(400).duration(600)}>
-//               <PlayerAvatar
-//                 name={mockCoach.name}
-//                 imageUri={mockCoach.imageUri}
-//                 size="medium"
-//                 variant="gradient"
-//                 showJerseyNumber={false}
-//                 online
-//               />
-//             </Animated.View>
-//           </View>
-//         </LinearGradient>
-//       </Animated.View>
-
-//       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-//         {/* Hero Section */}
-//         <Animated.View entering={ZoomIn.delay(600).duration(800).springify()}>
-//           <Card variant="gradient" padding="large" style={styles.heroCard}>
-//             <View style={styles.heroContent}>
-//               <IconSymbol name="person.3.fill" size={48} color={'dark'} />
-//               <View style={styles.heroText}>
-//                 <Text style={styles.heroTitle}>Select Your Team</Text>
-//                 <Text style={styles.heroSubtitle}>Choose the team you want to manage</Text>
-//               </View>
-//             </View>
-//           </Card>
-//         </Animated.View>
-
-//         {/* Teams Grid */}
-//         <View style={styles.teamsSection}>
-//           <Animated.View entering={FadeInUp.delay(800).springify()}>
-//             <View style={styles.sectionHeader}>
-//               <Text style={[styles.sectionTitle, { color: currentColors.text }]}>
-//                 Your Teams
-//               </Text>
-//               <View style={[styles.teamCountBadge, { backgroundColor: currentColors.primary }]}>
-//                 <Text style={styles.teamCountText}>{mockTeams.length}</Text>
-//               </View>
-//             </View>
-//           </Animated.View>
-
-//           <View style={styles.teamsGrid}>
-//             {mockTeams.map((team, index) => {
-//               const isSelected = selectedTeamId === team.id;
-//               const winPercentage = getWinPercentage(team);
-
-//               return (
-//                 <Animated.View
-//                   key={team.id}
-//                   entering={ZoomIn.delay(1000 + index * 150).springify()}
-//                   style={styles.teamCardWrapper}
-//                 >
-//                   <TouchableOpacity
-//                     onPress={() => handleTeamSelect(team.id)}
-//                     activeOpacity={0.9}
-//                   >
-//                     <Card
-//                       variant={isSelected ? "gradient" : "elevated_high"}
-//                       padding="none"
-//                       style={[
-//                         styles.teamCard,
-//                         isSelected && Shadows.primaryGlow
-//                       ]}
-//                     >
-//                       {/* Team Header with Gradient */}
-//                       {!isSelected && (
-//                         <LinearGradient
-//                           colors={[
-//                             isDark ? 'rgba(233, 122, 66, 0.1)' : 'rgba(233, 122, 66, 0.05)',
-//                             'transparent'
-//                           ]}
-//                           style={styles.teamHeaderGradient}
-//                         >
-//                           <View style={styles.teamHeader}>
-//                             <View style={styles.teamTitleRow}>
-//                               <Text style={[styles.teamName, { color: currentColors.text }]}>
-//                                 {team.name}
-//                               </Text>
-//                               <View style={[styles.levelBadge, { backgroundColor: currentColors.surface }]}>
-//                                 <IconSymbol name="star.fill" size={12} color={currentColors.primary} />
-//                                 <Text style={[styles.levelText, { color: currentColors.text }]}>
-//                                   {team.level}
-//                                 </Text>
-//                               </View>
-//                             </View>
-//                           </View>
-//                         </LinearGradient>
-//                       )}
-
-//                       {isSelected && (
-//                         <View style={styles.teamHeader}>
-//                           <View style={styles.teamTitleRow}>
-//                             <Text style={styles.teamNameSelected}>{team.name}</Text>
-//                             <View style={styles.levelBadgeSelected}>
-//                               <IconSymbol name="star.fill" size={12} color={'dark'} />
-//                               <Text style={styles.levelTextSelected}>{team.level}</Text>
-//                             </View>
-//                           </View>
-//                         </View>
-//                       )}
-
-//                       {/* Stats Row */}
-//                       <View style={[
-//                         styles.statsRow,
-//                         { backgroundColor: isSelected ? 'transparent' : currentColors.cardBackground }
-//                       ]}>
-//                         <View style={styles.statColumn}>
-//                           <View style={styles.statIconContainer}>
-//                             <IconSymbol 
-//                               name="chart.bar.fill" 
-//                               size={20} 
-//                               color={isSelected ? 'dark' : currentColors.primary}
-//                             />
-//                           </View>
-//                           <Text style={[
-//                             styles.statValue,
-//                             { color: isSelected ? 'dark' : currentColors.text }
-//                           ]}>
-//                             {team.record.wins}-{team.record.losses}
-//                           </Text>
-//                           <Text style={[
-//                             styles.statLabel,
-//                             { color: isSelected ? 'dark' : currentColors.textSecondary }
-//                           ]}>
-//                             Record
-//                           </Text>
-//                         </View>
-
-//                         <View style={[styles.statDivider, { 
-//                           backgroundColor: isSelected ? 'rgba(255, 255, 255, 0.3)' : currentColors.border 
-//                         }]} />
-
-//                         <View style={styles.statColumn}>
-//                           <View style={styles.statIconContainer}>
-//                             <IconSymbol 
-//                               name="person.3.fill" 
-//                               size={20} 
-//                               color={isSelected ? 'dark' : currentColors.primary}
-//                             />
-//                           </View>
-//                           <Text style={[
-//                             styles.statValue,
-//                             { color: isSelected ? 'dark' : currentColors.text }
-//                           ]}>
-//                             {team.players.length}
-//                           </Text>
-//                           <Text style={[
-//                             styles.statLabel,
-//                             { color: isSelected ? 'dark' : currentColors.textSecondary }
-//                           ]}>
-//                             Players
-//                           </Text>
-//                         </View>
-
-//                         <View style={[styles.statDivider, { 
-//                           backgroundColor: isSelected ? 'rgba(255, 255, 255, 0.3)' : currentColors.border 
-//                         }]} />
-
-//                         <View style={styles.statColumn}>
-//                           <View style={styles.statIconContainer}>
-//                             <IconSymbol 
-//                               name="chart.line.uptrend.xyaxis" 
-//                               size={20} 
-//                               color={isSelected ? 'dark' : currentColors.primary}
-//                             />
-//                           </View>
-//                           <Text style={[
-//                             styles.statValue,
-//                             { color: isSelected ? 'dark' : currentColors.text }
-//                           ]}>
-//                             {Math.round(winPercentage)}%
-//                           </Text>
-//                           <Text style={[
-//                             styles.statLabel,
-//                             { color: isSelected ? 'dark' : currentColors.textSecondary }
-//                           ]}>
-//                             Win %
-//                           </Text>
-//                         </View>
-//                       </View>
-
-//                       {/* Players Preview */}
-//                       <View style={[
-//                         styles.playersSection,
-//                         { backgroundColor: isSelected ? 'transparent' : currentColors.cardBackground }
-//                       ]}>
-//                         <View style={styles.playersSectionHeader}>
-//                           <Text style={[
-//                             styles.playersTitle,
-//                             { color: isSelected ? 'dark' : currentColors.text }
-//                           ]}>
-//                             Top Players
-//                           </Text>
-//                           {isSelected && (
-//                             <View style={styles.selectedCheck}>
-//                               <IconSymbol name="checkmark.circle.fill" size={20} color={'dark'} />
-//                             </View>
-//                           )}
-//                         </View>
-
-//                         <View style={styles.playersRow}>
-//                           {team.players.slice(0, 4).map((player, idx) => (
-//                             <View
-//                               key={player.id}
-//                               style={[
-//                                 styles.playerAvatar,
-//                                 { marginLeft: idx > 0 ? -Spacing.sm : 0 }
-//                               ]}
-//                             >
-//                               <PlayerAvatar
-//                                 name={player.name}
-//                                 imageUri={player.imageUri}
-//                                 jerseyNumber={player.jerseyNumber}
-//                                 size="small"
-//                                 variant={isSelected ? "glow" : "default"}
-//                               />
-//                             </View>
-//                           ))}
-//                           {team.players.length > 4 && (
-//                             <View style={[
-//                               styles.morePlayersCircle,
-//                               { 
-//                                 backgroundColor: isSelected ? 'rgba(255, 255, 255, 0.2)' : currentColors.surface,
-//                                 borderColor: isSelected ? 'rgba(255, 255, 255, 0.3)' : currentColors.border
-//                               }
-//                             ]}>
-//                               <Text style={[
-//                                 styles.morePlayersText,
-//                                 { color: isSelected ? 'dark' : currentColors.text }
-//                               ]}>
-//                                 +{team.players.length - 4}
-//                               </Text>
-//                             </View>
-//                           )}
-//                         </View>
-//                       </View>
-//                     </Card>
-//                   </TouchableOpacity>
-//                 </Animated.View>
-//               );
-//             })}
-//           </View>
-//         </View>
-
-//         {/* Selected Team Details */}
-//         {selectedTeam && (
-//           <Animated.View entering={FadeInUp.delay(1400).springify()}>
-//             <Card variant="elevated_high" padding="large" style={styles.detailsCard}>
-//               <View style={styles.detailsHeader}>
-//                 <IconSymbol name="chart.bar.fill" size={28} color={currentColors.primary} />
-//                 <View style={styles.detailsHeaderText}>
-//                   <Text style={[styles.detailsTitle, { color: currentColors.text }]}>
-//                     Team Performance
-//                   </Text>
-//                   <Text style={[styles.detailsSubtitle, { color: currentColors.textSecondary }]}>
-//                     {selectedTeam.name} • Season Stats
-//                   </Text>
-//                 </View>
-//               </View>
-
-//               {/* Performance Grid */}
-//               <View style={styles.performanceGrid}>
-//                 {[
-//                   { label: 'Avg Points', value: selectedTeam.stats.averagePoints, icon: 'star.fill', color: Colors.primary },
-//                   { label: 'Points Allowed', value: selectedTeam.stats.pointsAllowed, icon: 'arrow.down.circle.fill', color: Colors.error },
-//                   { label: 'FG%', value: `${selectedTeam.stats.fieldGoalPercentage}%`, icon: 'target', color: Colors.success },
-//                   { label: 'Turnovers', value: selectedTeam.stats.turnovers, icon: 'exclamationmark.triangle.fill', color: Colors.warning },
-//                 ].map((stat, index) => (
-//                   <Animated.View
-//                     key={index}
-//                     entering={ZoomIn.delay(1600 + index * 100).springify()}
-//                     style={[styles.performanceCard, { backgroundColor: currentColors.surface }]}
-//                   >
-//                     <View style={[styles.performanceIcon, { backgroundColor: stat.color + '20' }]}>
-//                       <IconSymbol name={stat.icon} size={24} color={stat.color} />
-//                     </View>
-//                     <Text style={[styles.performanceValue, { color: currentColors.text }]}>
-//                       {stat.value}
-//                     </Text>
-//                     <Text style={[styles.performanceLabel, { color: currentColors.textSecondary }]}>
-//                       {stat.label}
-//                     </Text>
-//                   </Animated.View>
-//                 ))}
-//               </View>
-
-//               {/* Recent Game */}
-//               {selectedTeam.recentGame && (
-//                 <BlurView
-//                   intensity={10}
-//                   tint={isDark ? 'dark' : 'light'}
-//                   style={styles.recentGameCard}
-//                 >
-//                   <View style={styles.recentGameHeader}>
-//                     <IconSymbol 
-//                       name="clock.fill" 
-//                       size={18} 
-//                       color={currentColors.primary}
-//                     />
-//                     <Text style={[styles.recentGameTitle, { color: currentColors.text }]}>
-//                       Recent Game
-//                     </Text>
-//                   </View>
-//                   <View style={styles.recentGameContent}>
-//                     <View style={[
-//                       styles.resultBadge,
-//                       { backgroundColor: selectedTeam.recentGame.result === 'W' ? Colors.success : Colors.error }
-//                     ]}>
-//                       <Text style={styles.resultText}>{selectedTeam.recentGame.result}</Text>
-//                     </View>
-//                     <Text style={[styles.recentGameText, { color: currentColors.text }]}>
-//                       vs {selectedTeam.recentGame.opponent}
-//                     </Text>
-//                     <Text style={[styles.recentGameScore, { color: currentColors.primary }]}>
-//                       {selectedTeam.recentGame.score.team}-{selectedTeam.recentGame.score.opponent}
-//                     </Text>
-//                   </View>
-//                 </BlurView>
-//               )}
-//             </Card>
-//           </Animated.View>
-//         )}
-
-//         {/* Continue Button */}
-//         <Animated.View entering={FadeInUp.delay(2000).springify()} style={styles.buttonContainer}>
-//           <AnimatedPressable
-//             onPressIn={handlePressIn}
-//             onPressOut={handlePressOut}
-//             style={[buttonAnimatedStyle, styles.buttonWrapper]}
-//           >
-//             <Button
-//               title="Continue with Team"
-//               onPress={handleContinue}
-//               variant="primaryGradient"
-//               size="large"
-//               icon={<IconSymbol name="arrow.right" size={20} color={'dark'} />}
-//               iconPosition="right"
-//               fullWidth
-//             />
-//           </AnimatedPressable>
-//         </Animated.View>
-
-//         <View style={styles.bottomSpacing} />
-//       </ScrollView>
-//     </SafeAreaView>
-//   );
-// }
-
-// const styles = StyleSheet.create({
-//   container: {
-//     flex: 1,
-//   },
-
-//   // Header
-//   headerGradient: {
-//     paddingVertical: Spacing.lg,
-//     paddingHorizontal: Spacing.xl,
-//   },
-
-//   headerContent: {
-//     flexDirection: 'row',
-//     justifyContent: 'space-between',
-//     alignItems: 'center',
-//   },
-
-//   logoContainer: {
-//     flexDirection: 'row',
-//     alignItems: 'center',
-//     gap: Spacing.sm,
-//   },
-
-//   logoBox: {
-//     width: 40,
-//     height: 40,
-//     borderRadius: BorderRadius.sm,
-//     alignItems: 'center',
-//     justifyContent: 'center',
-//   },
-
-//   logoText: {
-//     fontSize: Typography.title2,
-//     fontWeight: '900',
-//     color: Colors.textOnPrimary,
-//   },
-
-//   logoSubtext: {
-//     fontSize: Typography.callout,
-//     fontWeight: '700',
-//     letterSpacing: 1,
-//   },
-
-//   logoTagline: {
-//     fontSize: Typography.caption,
-//     fontWeight: '600',
-//     letterSpacing: 0.5,
-//     marginTop: 2,
-//   },
-
-//   content: {
-//     flex: 1,
-//   },
-
-//   // Hero Card
-//   heroCard: {
-//     marginHorizontal: Spacing.xl,
-//     marginTop: Spacing.lg,
-//   },
-
-//   heroContent: {
-//     flexDirection: 'row',
-//     alignItems: 'center',
-//     gap: Spacing.lg,
-//   },
-
-//   heroText: {
-//     flex: 1,
-//   },
-
-//   heroTitle: {
-//     fontSize: Typography.title3,
-//     fontWeight: '700',
-//     color: 'dark',
-//     marginBottom: Spacing.xs,
-//   },
-
-//   heroSubtitle: {
-//     fontSize: Typography.callout,
-//     color: 'dark',
-//     fontWeight: '500',
-//   },
-
-//   // Teams Section
-//   teamsSection: {
-//     marginTop: Spacing.lg,
-//   },
-
-//   sectionHeader: {
-//     flexDirection: 'row',
-//     alignItems: 'center',
-//     justifyContent: 'space-between',
-//     paddingHorizontal: Spacing.xl,
-//     marginBottom: Spacing.md,
-//   },
-
-//   sectionTitle: {
-//     fontSize: Typography.headline,
-//     fontWeight: '700',
-//   },
-
-//   teamCountBadge: {
-//     width: 28,
-//     height: 28,
-//     borderRadius: 14,
-//     alignItems: 'center',
-//     justifyContent: 'center',
-//   },
-
-//   teamCountText: {
-//     fontSize: Typography.footnote,
-//     fontWeight: '900',
-//     color: 'dark',
-//   },
-
-//   teamsGrid: {
-//     paddingHorizontal: Spacing.xl,
-//     gap: Spacing.lg,
-//   },
-
-//   teamCardWrapper: {
-//     marginBottom: Spacing.sm,
-//   },
-
-//   teamCard: {
-//     overflow: 'hidden',
-//   },
-
-//   teamHeaderGradient: {
-//     padding: Spacing.lg,
-//   },
-
-//   teamHeader: {
-//     padding: Spacing.lg,
-//   },
-
-//   teamTitleRow: {
-//     flexDirection: 'row',
-//     justifyContent: 'space-between',
-//     alignItems: 'center',
-//   },
-
-//   teamName: {
-//     fontSize: Typography.headline,
-//     fontWeight: '700',
-//     flex: 1,
-//   },
-
-//   teamNameSelected: {
-//     fontSize: Typography.headline,
-//     fontWeight: '700',
-//     color: 'dark',
-//     flex: 1,
-//   },
-
-//   levelBadge: {
-//     flexDirection: 'row',
-//     alignItems: 'center',
-//     gap: Spacing.xs / 2,
-//     paddingHorizontal: Spacing.sm,
-//     paddingVertical: Spacing.xs / 2,
-//     borderRadius: BorderRadius.full,
-//   },
-
-//   levelBadgeSelected: {
-//     flexDirection: 'row',
-//     alignItems: 'center',
-//     gap: Spacing.xs / 2,
-//     paddingHorizontal: Spacing.sm,
-//     paddingVertical: Spacing.xs / 2,
-//     borderRadius: BorderRadius.full,
-//     backgroundColor: 'rgba(255, 255, 255, 0.2)',
-//   },
-
-//   levelText: {
-//     fontSize: Typography.footnote,
-//     fontWeight: '700',
-//   },
-
-//   levelTextSelected: {
-//     fontSize: Typography.footnote,
-//     fontWeight: '700',
-//     color: 'dark',
-//   },
-
-//   // Stats Row
-//   statsRow: {
-//     flexDirection: 'row',
-//     paddingVertical: Spacing.lg,
-//     paddingHorizontal: Spacing.lg,
-//   },
-
-//   statColumn: {
-//     flex: 1,
-//     alignItems: 'center',
-//     gap: Spacing.xs,
-//   },
-
-//   statIconContainer: {
-//     marginBottom: Spacing.xs / 2,
-//   },
-
-//   statValue: {
-//     fontSize: Typography.title3,
-//     fontWeight: '900',
-//   },
-
-//   statLabel: {
-//     fontSize: Typography.caption,
-//     fontWeight: '600',
-//   },
-
-//   statDivider: {
-//     width: 1,
-//     alignSelf: 'stretch',
-//     marginHorizontal: Spacing.sm,
-//   },
-
-//   // Players Section
-//   playersSection: {
-//     padding: Spacing.lg,
-//   },
-
-//   playersSectionHeader: {
-//     flexDirection: 'row',
-//     justifyContent: 'space-between',
-//     alignItems: 'center',
-//     marginBottom: Spacing.md,
-//   },
-
-//   playersTitle: {
-//     fontSize: Typography.callout,
-//     fontWeight: '700',
-//   },
-
-//   selectedCheck: {
-//     width: 24,
-//     height: 24,
-//   },
-
-//   playersRow: {
-//     flexDirection: 'row',
-//     alignItems: 'center',
-//   },
-
-//   playerAvatar: {
-//     // marginLeft handled inline
-//   },
-
-//   morePlayersCircle: {
-//     width: 32,
-//     height: 32,
-//     borderRadius: 16,
-//     borderWidth: 2,
-//     alignItems: 'center',
-//     justifyContent: 'center',
-//     marginLeft: -Spacing.sm,
-//   },
-
-//   morePlayersText: {
-//     fontSize: Typography.caption,
-//     fontWeight: '900',
-//   },
-
-//   // Details Card
-//   detailsCard: {
-//     marginHorizontal: Spacing.xl,
-//     marginTop: Spacing.lg,
-//   },
-
-//   detailsHeader: {
-//     flexDirection: 'row',
-//     alignItems: 'center',
-//     gap: Spacing.md,
-//     marginBottom: Spacing.lg,
-//   },
-
-//   detailsHeaderText: {
-//     flex: 1,
-//   },
-
-//   detailsTitle: {
-//     fontSize: Typography.headline,
-//     fontWeight: '700',
-//     marginBottom: Spacing.xs / 2,
-//   },
-
-//   detailsSubtitle: {
-//     fontSize: Typography.callout,
-//     fontWeight: '500',
-//   },
-
-//   performanceGrid: {
-//     flexDirection: 'row',
-//     flexWrap: 'wrap',
-//     gap: Spacing.sm,
-//     marginBottom: Spacing.lg,
-//   },
-
-//   performanceCard: {
-//     width: '48%',
-//     padding: Spacing.md,
-//     borderRadius: BorderRadius.lg,
-//     alignItems: 'center',
-//     gap: Spacing.xs,
-//   },
-
-//   performanceIcon: {
-//     width: 48,
-//     height: 48,
-//     borderRadius: 24,
-//     alignItems: 'center',
-//     justifyContent: 'center',
-//   },
-
-//   performanceValue: {
-//     fontSize: Typography.title3,
-//     fontWeight: '900',
-//   },
-
-//   performanceLabel: {
-//     fontSize: Typography.caption,
-//     fontWeight: '600',
-//   },
-
-//   // Recent Game
-//   recentGameCard: {
-//     borderRadius: BorderRadius.lg,
-//     padding: Spacing.md,
-//     overflow: 'hidden',
-//   },
-
-//   recentGameHeader: {
-//     flexDirection: 'row',
-//     alignItems: 'center',
-//     gap: Spacing.xs,
-//     marginBottom: Spacing.sm,
-//   },
-
-//   recentGameTitle: {
-//     fontSize: Typography.callout,
-//     fontWeight: '700',
-//   },
-
-//   recentGameContent: {
-//     flexDirection: 'row',
-//     alignItems: 'center',
-//     gap: Spacing.sm,
-//   },
-
-//   resultBadge: {
-//     width: 32,
-//     height: 32,
-//     borderRadius: 16,
-//     alignItems: 'center',
-//     justifyContent: 'center',
-//   },
-
-//   resultText: {
-//     fontSize: Typography.callout,
-//     fontWeight: '900',
-//     color: 'dark',
-//   },
-
-//   recentGameText: {
-//     fontSize: Typography.callout,
-//     fontWeight: '600',
-//     flex: 1,
-//   },
-
-//   recentGameScore: {
-//     fontSize: Typography.headline,
-//     fontWeight: '900',
-//   },
-
-//   // Button
-//   buttonContainer: {
-//     paddingHorizontal: Spacing.xl,
-//     marginTop: Spacing.xl,
-//   },
-
-//   buttonWrapper: {
-//     width: '100%',
-//   },
-
-//   bottomSpacing: {
-//     height: Spacing.xxxl,
-//   },
-// });

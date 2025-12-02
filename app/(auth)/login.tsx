@@ -1,18 +1,35 @@
 import React, { useState } from 'react';
-import { TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import {
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  View,
+  Text,
+  KeyboardAvoidingView,
+  Platform,
+  useWindowDimensions,
+  Alert,
+  AccessibilityInfo,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-import Animated, { FadeInUp } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
-import { ThemedView } from '@/components/themed-view';
-import { ThemedText } from '@/components/themed-text';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import authService from '@/services/api/authService';
+import { Colors, BorderRadius, Spacing, Typography, Shadows } from '@/constants/theme';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const router = useRouter();
+  const { width, height } = useWindowDimensions();
+
+  const isTablet = width >= 768;
+  const isLandscape = width > height;
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -20,7 +37,6 @@ export default function LoginScreen() {
       return;
     }
 
-    // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       Alert.alert('Error', 'Please enter a valid email address');
@@ -29,78 +45,33 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      console.log('Starting login with email:', email);
-
-      // Call login API using authService
-      const token = await authService.login({
+      await authService.login({
         email: email.toLowerCase().trim(),
         password: password,
       });
 
-      console.log('Login successful, token received');
-      Alert.alert('Success', 'Login successful!');
-
-      // Navigate to org selection screen
+      AccessibilityInfo.announceForAccessibility('Login successful');
       router.replace('/(auth)/org-selection');
 
     } catch (error: any) {
-      console.error('Login error:', error);
-      console.error('Error response:', error.response);
-      console.error('Full error object:', JSON.stringify(error, null, 2));
-      console.error('Error keys:', Object.keys(error));
-      console.error('Error config:', error.config);
-      console.error('Error request:', error.request);
-      console.error('Error stack:', error.stack);
-      
-      // Log all error properties
-      console.log('=== DETAILED ERROR BREAKDOWN ===');
-      console.log('error.message:', error.message);
-      console.log('error.code:', error.code);
-      console.log('error.name:', error.name);
-      console.log('error.response:', error.response);
-      console.log('error.response?.status:', error.response?.status);
-      console.log('error.response?.statusText:', error.response?.statusText);
-      console.log('error.response?.data:', error.response?.data);
-      console.log('error.response?.headers:', error.response?.headers);
-      console.log('error.config?.baseURL:', error.config?.baseURL);
-      console.log('error.config?.url:', error.config?.url);
-      console.log('error.config?.method:', error.config?.method);
-      console.log('error.config?.data:', error.config?.data);
-      console.log('error.config?.headers:', error.config?.headers);
-      console.log('error.config?.timeout:', error.config?.timeout);
-      console.log('================================');
-      
       const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message;
-      
-      if (error.response?.status === 401 || errorMessage?.includes('Invalid') || errorMessage?.includes('credentials')) {
+
+      if (error.response?.status === 401 || errorMessage?.includes('Invalid')) {
         Alert.alert('Error', 'Invalid email or password');
-      } else if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
+      } else if (error.code === 'ERR_NETWORK') {
         Alert.alert(
-          'Network Error',
-          'Cannot connect to the server.\n\n' +
-          'Possible causes:\n' +
-          '• Backend server is not running\n' +
-          '• Wrong API URL in config/api.ts\n' +
-          '• Network connection issue\n\n' +
-          'Current URL: ' + error.config?.baseURL + error.config?.url + '\n\n' +
-          'Would you like to continue in DEMO mode?',
+          'Connection Error',
+          'Unable to connect to the server. Would you like to continue in Demo Mode?',
           [
-            {
-              text: 'Cancel',
-              style: 'cancel'
-            },
+            { text: 'Cancel', style: 'cancel' },
             {
               text: 'Demo Mode',
-              onPress: () => {
-                console.log('Using demo mode');
-                Alert.alert('Demo Mode', 'Continuing without backend connection');
-                router.replace('/(tabs)');
-              }
-            }
+              onPress: () => router.replace('/(tabs)'),
+            },
           ]
         );
       } else {
-        Alert.alert('Error', errorMessage || 'Login failed. Please try again');
+        Alert.alert('Error', errorMessage || 'Login failed. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -108,115 +79,239 @@ export default function LoginScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
+    <View style={styles.container}>
+      {/* Navy background with subtle gradient */}
       <LinearGradient
-        colors={['#FFFFFF', '#FFF5F0', '#E97A42']}
+        colors={['#1E2A3A', '#2D3E52', '#1E2A3A']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={styles.gradient}
-      >
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <Animated.View entering={FadeInUp.delay(200).duration(1000)} style={styles.header}>
-            <ThemedView style={styles.logoContainer}>
-              <LinearGradient
-                colors={['#E97A42', '#F59E0B']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.logoBox}
-              >
-                <ThemedText style={styles.logoText}>A</ThemedText>
-              </LinearGradient>
-            </ThemedView>
-            <ThemedText type="title" style={styles.title}>Welcome Back</ThemedText>
-            <ThemedText style={styles.subtitle}>Sign in to AthlosCore™</ThemedText>
-          </Animated.View>
+        style={StyleSheet.absoluteFill}
+      />
 
-          <Animated.View entering={FadeInUp.delay(400).duration(1000)} style={styles.formContainer}>
-            <BlurView intensity={20} tint="light" style={styles.glassCard}>
-              <ThemedView style={styles.inputContainer}>
-                <ThemedText style={styles.label}>Email</ThemedText>
-                <TextInput
-                  style={styles.input}
-                  placeholder="your@email.com"
-                  placeholderTextColor="#999999"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  editable={!loading}
-                  autoCorrect={false}
-                />
-              </ThemedView>
-
-              <ThemedView style={styles.inputContainer}>
-                <ThemedText style={styles.label}>Password</ThemedText>
-                <TextInput
-                  style={styles.input}
-                  placeholder="••••••••"
-                  placeholderTextColor="#999999"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  editable={!loading}
-                  autoCapitalize="none"
-                />
-              </ThemedView>
-
-              <TouchableOpacity onPress={() => Alert.alert('Forgot Password', 'Password reset feature coming soon!')}>
-                <ThemedText style={styles.forgotPassword}>Forgot Password?</ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={[styles.button, loading && styles.buttonDisabled]} 
-                onPress={handleLogin}
-                disabled={loading}
-                activeOpacity={0.8}
+      <SafeAreaView style={styles.safeArea}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardView}
+        >
+          <View style={[
+            styles.contentContainer,
+            isTablet && isLandscape && styles.contentContainerLandscape,
+          ]}>
+            {/* Left side - Branding (visible on tablet landscape) */}
+            {isTablet && isLandscape && (
+              <Animated.View
+                entering={FadeInDown.delay(100).duration(600)}
+                style={styles.brandingSection}
               >
                 <LinearGradient
-                  colors={loading ? ['#CCCCCC', '#999999'] : ['#E97A42', '#F59E0B']}
+                  colors={[Colors.primary, '#F59E0B']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
-                  style={styles.buttonGradient}
+                  style={styles.largeLogo}
                 >
-                  <ThemedText style={styles.buttonText}>
-                    {loading ? 'Signing In...' : 'Sign In'}
-                  </ThemedText>
+                  <Text style={styles.largeLogoText}>A</Text>
                 </LinearGradient>
-              </TouchableOpacity>
+                <Text style={styles.brandTitle}>AthlosCore</Text>
+                <Text style={styles.brandTagline}>
+                  AI-Powered Basketball Analytics
+                </Text>
+                <View style={styles.featureList}>
+                  <FeatureItem icon="video.fill" text="Smart Game Film Analysis" />
+                  <FeatureItem icon="chart.bar.fill" text="Player Performance Insights" />
+                  <FeatureItem icon="star.fill" text="AI-Generated Highlights" />
+                </View>
+              </Animated.View>
+            )}
 
-              <ThemedView style={styles.divider}>
-                <ThemedView style={styles.dividerLine} />
-                <ThemedText style={styles.dividerText}>or continue with</ThemedText>
-                <ThemedView style={styles.dividerLine} />
-              </ThemedView>
-
-              {/* Social login buttons - Coming soon */}
-              {/* <ThemedView style={styles.socialButtons}>
-                <TouchableOpacity style={styles.socialButton}>
-                  <ThemedText style={styles.socialIcon}>G</ThemedText>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.socialButton}>
-                  <ThemedText style={styles.socialIcon}>🍎</ThemedText>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.socialButton}>
-                  <ThemedText style={styles.socialIcon}>📱</ThemedText>
-                </TouchableOpacity>
-              </ThemedView> */}
-
-              <TouchableOpacity 
-                style={styles.signupLink}
-                onPress={() => router.push('/(auth)/register')}
-                disabled={loading}
+            {/* Right side - Login Form */}
+            <View style={[
+              styles.formSection,
+              isTablet && isLandscape && styles.formSectionLandscape,
+            ]}>
+              <Animated.View
+                entering={FadeInUp.delay(200).duration(600)}
+                style={[
+                  styles.formCard,
+                  isTablet && styles.formCardTablet,
+                ]}
               >
-                <ThemedText style={styles.signupText}>
-                  Don't have an account? <ThemedText style={styles.signupBold}>Sign Up</ThemedText>
-                </ThemedText>
-              </TouchableOpacity>
-            </BlurView>
-          </Animated.View>
-        </ScrollView>
-      </LinearGradient>
-    </ThemedView>
+                {/* Logo (visible on phone or tablet portrait) */}
+                {(!isTablet || !isLandscape) && (
+                  <View style={styles.headerSection}>
+                    <LinearGradient
+                      colors={[Colors.primary, '#F59E0B']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.logo}
+                    >
+                      <Text style={styles.logoText}>A</Text>
+                    </LinearGradient>
+                    <Text style={styles.title}>Welcome Back</Text>
+                    <Text style={styles.subtitle}>Sign in to AthlosCore</Text>
+                  </View>
+                )}
+
+                {isTablet && isLandscape && (
+                  <View style={styles.headerSection}>
+                    <Text style={styles.title}>Sign In</Text>
+                    <Text style={styles.subtitle}>Enter your credentials to continue</Text>
+                  </View>
+                )}
+
+                {/* Email Input */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Email</Text>
+                  <View style={[
+                    styles.inputWrapper,
+                    focusedInput === 'email' && styles.inputWrapperFocused,
+                  ]}>
+                    <IconSymbol
+                      name="envelope.fill"
+                      size={20}
+                      color={focusedInput === 'email' ? Colors.primary : '#6B7280'}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="coach@example.com"
+                      placeholderTextColor="#9CA3AF"
+                      value={email}
+                      onChangeText={setEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      editable={!loading}
+                      onFocus={() => setFocusedInput('email')}
+                      onBlur={() => setFocusedInput(null)}
+                      accessibilityLabel="Email address"
+                      accessibilityHint="Enter your email address"
+                    />
+                  </View>
+                </View>
+
+                {/* Password Input */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Password</Text>
+                  <View style={[
+                    styles.inputWrapper,
+                    focusedInput === 'password' && styles.inputWrapperFocused,
+                  ]}>
+                    <IconSymbol
+                      name="lock.fill"
+                      size={20}
+                      color={focusedInput === 'password' ? Colors.primary : '#6B7280'}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="••••••••"
+                      placeholderTextColor="#9CA3AF"
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry={!showPassword}
+                      editable={!loading}
+                      autoCapitalize="none"
+                      onFocus={() => setFocusedInput('password')}
+                      onBlur={() => setFocusedInput(null)}
+                      accessibilityLabel="Password"
+                      accessibilityHint="Enter your password"
+                    />
+                    <TouchableOpacity
+                      onPress={() => setShowPassword(!showPassword)}
+                      accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                      accessibilityRole="button"
+                    >
+                      <IconSymbol
+                        name={showPassword ? 'eye.slash.fill' : 'eye.fill'}
+                        size={20}
+                        color="#6B7280"
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Forgot Password */}
+                <TouchableOpacity
+                  onPress={() => Alert.alert('Coming Soon', 'Password reset will be available soon.')}
+                  style={styles.forgotButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Forgot password"
+                >
+                  <Text style={styles.forgotText}>Forgot Password?</Text>
+                </TouchableOpacity>
+
+                {/* Sign In Button */}
+                <TouchableOpacity
+                  onPress={handleLogin}
+                  disabled={loading}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={loading ? 'Signing in' : 'Sign in'}
+                  accessibilityState={{ disabled: loading }}
+                >
+                  <LinearGradient
+                    colors={loading ? ['#9CA3AF', '#6B7280'] : [Colors.primary, '#F59E0B']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={[styles.signInButton, loading && styles.signInButtonDisabled]}
+                  >
+                    {loading ? (
+                      <Text style={styles.signInButtonText}>Signing In...</Text>
+                    ) : (
+                      <>
+                        <Text style={styles.signInButtonText}>Sign In</Text>
+                        <IconSymbol name="arrow.right" size={20} color="#FFFFFF" />
+                      </>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                {/* Divider */}
+                <View style={styles.divider}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>or</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+
+                {/* Demo Mode Button */}
+                <TouchableOpacity
+                  onPress={() => router.replace('/(tabs)')}
+                  style={styles.demoButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Continue in demo mode"
+                >
+                  <IconSymbol name="play.circle.fill" size={20} color={Colors.primary} />
+                  <Text style={styles.demoButtonText}>Try Demo Mode</Text>
+                </TouchableOpacity>
+
+                {/* Sign Up Link */}
+                <View style={styles.signUpContainer}>
+                  <Text style={styles.signUpText}>Don't have an account? </Text>
+                  <TouchableOpacity
+                    onPress={() => router.push('/(auth)/register')}
+                    disabled={loading}
+                    accessibilityRole="link"
+                    accessibilityLabel="Sign up for a new account"
+                  >
+                    <Text style={styles.signUpLink}>Sign Up</Text>
+                  </TouchableOpacity>
+                </View>
+              </Animated.View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </View>
+  );
+}
+
+// Feature item component for tablet landscape view
+function FeatureItem({ icon, text }: { icon: string; text: string }) {
+  return (
+    <View style={styles.featureItem}>
+      <View style={styles.featureIconContainer}>
+        <IconSymbol name={icon as any} size={20} color={Colors.primary} />
+      </View>
+      <Text style={styles.featureText}>{text}</Text>
+    </View>
   );
 }
 
@@ -224,164 +319,245 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  gradient: {
+  safeArea: {
     flex: 1,
   },
-  scrollContent: {
-    flexGrow: 1,
-    paddingVertical: 60,
-    paddingHorizontal: 24,
+  keyboardView: {
+    flex: 1,
   },
-  header: {
+  contentContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 40,
+    padding: Spacing.lg,
   },
-  logoContainer: {
-    marginBottom: 20,
-    backgroundColor: 'transparent',
+  contentContainerLandscape: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: Spacing.xxl,
   },
-  logoBox: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
+
+  // Branding section (tablet landscape)
+  brandingSection: {
+    flex: 1,
+    maxWidth: 400,
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
+  },
+  largeLogo: {
+    width: 120,
+    height: 120,
+    borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#E97A42',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+    marginBottom: Spacing.lg,
+    ...Shadows.large,
+  },
+  largeLogoText: {
+    fontSize: 72,
+    fontWeight: '900',
+    color: '#FFFFFF',
+  },
+  brandTitle: {
+    fontSize: Typography.title1,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: Spacing.sm,
+  },
+  brandTagline: {
+    fontSize: Typography.body,
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'center',
+    marginBottom: Spacing.xl,
+  },
+  featureList: {
+    width: '100%',
+    gap: Spacing.md,
+  },
+  featureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  featureIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  featureText: {
+    fontSize: Typography.callout,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '500',
+  },
+
+  // Form section
+  formSection: {
+    width: '100%',
+    maxWidth: 440,
+    alignItems: 'center',
+  },
+  formSectionLandscape: {
+    flex: 1,
+    maxWidth: 480,
+  },
+  formCard: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: BorderRadius.xxl,
+    padding: Spacing.xl,
+    ...Shadows.large,
+  },
+  formCardTablet: {
+    padding: Spacing.xxl,
+  },
+
+  // Header
+  headerSection: {
+    alignItems: 'center',
+    marginBottom: Spacing.xl,
+  },
+  logo: {
+    width: 72,
+    height: 72,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
+    ...Shadows.medium,
   },
   logoText: {
-    fontSize: 48,
+    fontSize: 40,
     fontWeight: '900',
     color: '#FFFFFF',
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 8,
+    fontSize: Typography.title2,
+    fontWeight: '700',
+    color: Colors.text,
+    marginBottom: Spacing.xs,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#666666',
-    fontWeight: '600',
+    fontSize: Typography.callout,
+    color: Colors.textSecondary,
   },
-  formContainer: {
-    width: '100%',
-  },
-  glassCard: {
-    borderRadius: 24,
-    padding: 24,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderWidth: 1,
-    borderColor: 'rgba(233, 122, 66, 0.3)',
-    overflow: 'hidden',
-    shadowColor: '#E97A42',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  inputContainer: {
-    marginBottom: 20,
-    backgroundColor: 'transparent',
+
+  // Input styles
+  inputGroup: {
+    marginBottom: Spacing.md,
   },
   label: {
-    fontSize: 14,
+    fontSize: Typography.subhead,
     fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 8,
+    color: Colors.text,
+    marginBottom: Spacing.sm,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    paddingHorizontal: Spacing.md,
+    height: 52,
+    gap: Spacing.sm,
+  },
+  inputWrapperFocused: {
+    borderColor: Colors.primary,
+    backgroundColor: '#FFFFFF',
+    ...Shadows.small,
   },
   input: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: '#1a1a1a',
-    borderWidth: 1,
-    borderColor: '#E97A42',
+    flex: 1,
+    fontSize: Typography.callout,
+    color: Colors.text,
+    height: '100%',
   },
-  forgotPassword: {
-    color: '#E97A42',
-    fontSize: 14,
+
+  // Forgot password
+  forgotButton: {
+    alignSelf: 'flex-end',
+    marginBottom: Spacing.lg,
+    padding: Spacing.xs,
+  },
+  forgotText: {
+    fontSize: Typography.subhead,
+    color: Colors.primary,
     fontWeight: '600',
-    textAlign: 'right',
-    marginBottom: 24,
   },
-  button: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginTop: 8,
-    shadowColor: '#E97A42',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonGradient: {
-    paddingVertical: 16,
+
+  // Sign in button
+  signInButton: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    height: 52,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.sm,
+    ...Shadows.medium,
   },
-  buttonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
+  signInButtonDisabled: {
+    opacity: 0.7,
   },
+  signInButtonText: {
+    fontSize: Typography.body,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+
+  // Divider
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 24,
-    backgroundColor: 'transparent',
+    marginVertical: Spacing.lg,
+    gap: Spacing.md,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#E97A42',
+    backgroundColor: Colors.border,
   },
   dividerText: {
-    color: '#666666',
-    marginHorizontal: 12,
-    fontSize: 14,
+    fontSize: Typography.subhead,
+    color: Colors.textSecondary,
   },
-  socialButtons: {
+
+  // Demo button
+  demoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 52,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    backgroundColor: 'rgba(233, 122, 66, 0.05)',
+    gap: Spacing.sm,
+  },
+  demoButtonText: {
+    fontSize: Typography.callout,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+
+  // Sign up link
+  signUpContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 16,
-    marginBottom: 24,
-    backgroundColor: 'transparent',
-  },
-  socialButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E97A42',
-    shadowColor: '#E97A42',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    marginTop: Spacing.lg,
   },
-  socialIcon: {
-    fontSize: 24,
+  signUpText: {
+    fontSize: Typography.subhead,
+    color: Colors.textSecondary,
   },
-  signupLink: {
-    alignItems: 'center',
-  },
-  signupText: {
-    color: '#666666',
-    fontSize: 14,
-  },
-  signupBold: {
-    fontWeight: 'bold',
-    color: '#E97A42',
+  signUpLink: {
+    fontSize: Typography.subhead,
+    fontWeight: '700',
+    color: Colors.primary,
   },
 });

@@ -1,27 +1,28 @@
 import React, { useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  FlatList, 
-  TouchableOpacity, 
-  Image, 
-  ActivityIndicator, 
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  Image,
+  ActivityIndicator,
   StyleSheet,
   Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Animated, { FadeIn, FadeInDown, FadeInUp, SlideInRight } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
-import { fetchVideos } from '@/services/videoService';
-import { useVideoStore } from '@/stores'; // ✅ Import video store
-import { useAuth } from '@/contexts/AuthContext'; // ✅ Import auth context
+import videoService from '@/services/api/videoService';
+import { useVideoStore } from '@/stores';
+import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import { BorderRadius, Spacing, Typography, Shadows, Gradients } from '@/constants/theme';
+import { BorderRadius, Spacing, Typography, Shadows, Colors } from '@/constants/theme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import * as Sentry from '@sentry/react-native';
 import { ComponentErrorBoundary } from '@/components/component-error-boundary';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ✅ Mock videos for demo/fallback
 const MOCK_VIDEOS = [
@@ -82,7 +83,7 @@ function VideosScreenContent() {
       } else {
         setLoading(true);
       }
-      
+
       setError(null);
 
       // ✅ Use mock data in demo mode
@@ -92,35 +93,81 @@ function VideosScreenContent() {
         setUsingMockData(true);
         return;
       }
-      
-      const data = await fetchVideos();
+
+      // ✅ Get org_id from AsyncStorage
+      const orgId = await AsyncStorage.getItem('current_org_id');
+
+      console.log('📹 Fetching videos from API...');
+      console.log('   Org ID:', orgId || 'all');
+
+      // ✅ Use real API service
+      const data = await videoService.getVideos({
+        org_id: orgId || undefined,
+        status: 'completed' // Only show completed videos
+      });
+
+      console.log('✅ Videos fetched:', data.length);
+
+      // ✅ Transform API data to match component format
+      const transformedVideos = data.map((video: any) => ({
+        id: video.video_id,
+        title: video.title || 'Untitled Video',
+        thumbnail: video.thumbnail_url,
+        duration: video.duration || '--:--',
+        views: video.views || '0',
+        date: formatDate(video.created_at),
+        videoUrl: video.gcsPath,
+        uploadedAt: video.created_at,
+      }));
+
       // ✅ Store videos in Zustand
-      setVideos(Array.isArray(data) ? data : []);
+      setVideos(transformedVideos);
       setUsingMockData(false);
-      
+
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to load videos';
-      
+
       // ✅ Fallback to mock data on error
-      console.error('API fetch failed, using mock data:', err);
+      console.error('❌ API fetch failed, using mock data:', err);
       console.log('📦 Using mock videos (API Fallback)');
       setVideos(MOCK_VIDEOS);
       setUsingMockData(true);
       setError('Unable to connect to server. Using sample data.');
-      
+
       Sentry.captureException(err, {
         tags: { screen: 'videos', action: 'load_videos' },
-        extra: { 
+        extra: {
           isRefresh,
-          errorMessage: errorMsg 
+          errorMessage: errorMsg
         }
       });
-      
+
       console.error('Error loading videos:', err);
-      
+
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  // Helper function to format dates
+  const formatDate = (dateString?: string): string => {
+    if (!dateString) return 'Recent';
+
+    try {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffInMs = now.getTime() - date.getTime();
+      const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+
+      if (diffInDays === 0) return 'Today';
+      if (diffInDays === 1) return 'Yesterday';
+      if (diffInDays < 7) return `${diffInDays} days ago`;
+      if (diffInDays < 30) return `${Math.floor(diffInDays / 7)} weeks ago`;
+      if (diffInDays < 365) return `${Math.floor(diffInDays / 30)} months ago`;
+      return `${Math.floor(diffInDays / 365)} years ago`;
+    } catch {
+      return 'Recent';
     }
   };
 
@@ -170,7 +217,7 @@ function VideosScreenContent() {
 
     return (
       <Animated.View
-        entering={SlideInRight.delay(index * 100).springify()}
+        entering={FadeInUp.delay(100 + index * 50).duration(400)}
         style={styles.cardWrapper}
       >
         <TouchableOpacity
@@ -205,10 +252,10 @@ function VideosScreenContent() {
               {/* Play button overlay */}
               <View style={styles.playOverlay}>
                 <LinearGradient
-                  colors={Gradients.primary.colors}
-                  start={Gradients.primary.start}
-                  end={Gradients.primary.end}
-                  style={[styles.playButton, Shadows.primaryGlow]}
+                  colors={[Colors.primary, '#F59E0B']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.playButton}
                 >
                   <IconSymbol name="play.fill" size={32} color="#FFFFFF" />
                 </LinearGradient>
@@ -262,34 +309,27 @@ function VideosScreenContent() {
     );
   };
 
-  // ✅ Loading state from store
+  // Loading state
   if (isLoading && !refreshing) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: currentColors.background }]}>
         <View style={styles.loadingContainer}>
-          <LinearGradient
-            colors={Gradients.primary.colors}
-            start={Gradients.primary.start}
-            end={Gradients.primary.end}
-            style={styles.loadingGradient}
-          >
-            <ActivityIndicator size="large" color="#FFFFFF" />
-          </LinearGradient>
-          <Text style={[styles.loadingText, { color: currentColors.text }]}>
-            Loading highlights...
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={[styles.loadingText, { color: currentColors.textSecondary }]}>
+            Loading videos...
           </Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  // ✅ Error state from store (only show if no videos and not using mock data)
+  // Error state
   if (error && videos.length === 0 && !usingMockData) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: currentColors.background }]}>
         <View style={styles.errorContainer}>
-          <View style={[styles.errorIconContainer, { backgroundColor: `${currentColors.error}20` }]}>
-            <IconSymbol name="exclamationmark.triangle.fill" size={64} color={currentColors.error} />
+          <View style={[styles.errorIconContainer, { backgroundColor: Colors.error + '15' }]}>
+            <IconSymbol name="exclamationmark.triangle.fill" size={64} color={Colors.error} />
           </View>
           <Text style={[styles.errorTitle, { color: currentColors.text }]}>
             Unable to Load Videos
@@ -298,18 +338,12 @@ function VideosScreenContent() {
             {error}
           </Text>
           <TouchableOpacity
+            style={[styles.retryButton, { backgroundColor: Colors.primary }]}
             onPress={() => loadVideos()}
-            activeOpacity={0.8}
+            activeOpacity={0.7}
           >
-            <LinearGradient
-              colors={Gradients.primary.colors}
-              start={Gradients.primary.start}
-              end={Gradients.primary.end}
-              style={[styles.retryButton, Shadows.primaryGlow]}
-            >
-              <IconSymbol name="arrow.clockwise" size={20} color="#FFFFFF" />
-              <Text style={styles.retryText}>Retry</Text>
-            </LinearGradient>
+            <IconSymbol name="arrow.clockwise" size={20} color="#FFFFFF" />
+            <Text style={styles.retryText}>Retry</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -318,68 +352,45 @@ function VideosScreenContent() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: currentColors.background }]}>
-      {/* Header */}
-      <Animated.View entering={FadeInDown.duration(600).springify()}>
-        <LinearGradient
-          colors={isDark 
-            ? [currentColors.headerBackground, currentColors.background]
-            : [currentColors.headerBackground, currentColors.background]
-          }
-          style={styles.header}
-        >
-          <View style={styles.headerContent}>
-            <Animated.View entering={FadeIn.delay(200).duration(600)} style={styles.headerLeft}>
-              <LinearGradient
-                colors={Gradients.primary.colors}
-                start={Gradients.primary.start}
-                end={Gradients.primary.end}
-                style={[styles.logoBox, Shadows.primaryGlow]}
-              >
-                <IconSymbol name="video.fill" size={24} color="#FFFFFF" />
-              </LinearGradient>
-              <View>
-                <Text style={[styles.headerTitle, { color: currentColors.text }]}>
-                  Match Highlights
-                </Text>
-                <Text style={[styles.headerSubtitle, { color: currentColors.primary }]}>
-                  {videos.length} {videos.length === 1 ? 'video' : 'videos'}
-                </Text>
-              </View>
-            </Animated.View>
-
-            <Animated.View entering={FadeIn.delay(400).duration(600)}>
-              <TouchableOpacity 
-                onPress={handleUploadPress}
-                activeOpacity={0.8}
-              >
-                <LinearGradient
-                  colors={Gradients.primary.colors}
-                  start={Gradients.primary.start}
-                  end={Gradients.primary.end}
-                  style={[styles.uploadButton, Shadows.primaryGlow]}
-                >
-                  <IconSymbol name="arrow.up.circle.fill" size={20} color="#FFFFFF" />
-                  <Text style={styles.uploadText}>Upload</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </Animated.View>
+      {/* Header - Matching Dashboard Style */}
+      <Animated.View entering={FadeIn.duration(400)} style={styles.header}>
+        <View style={styles.headerLeft}>
+          <LinearGradient
+            colors={[Colors.primary, '#F59E0B']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.logoBox}
+          >
+            <Text style={styles.logoText}>A</Text>
+          </LinearGradient>
+          <View>
+            <Text style={[styles.headerTitle, { color: currentColors.text }]}>Videos</Text>
+            <Text style={[styles.headerSubtitle, { color: currentColors.textSecondary }]}>
+              {videos.length} {videos.length === 1 ? 'video' : 'videos'}
+            </Text>
           </View>
-        </LinearGradient>
+        </View>
+
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={[styles.headerButton, { backgroundColor: currentColors.surface }]}
+            onPress={handleUploadPress}
+            accessibilityLabel="Upload video"
+          >
+            <IconSymbol name="plus" size={20} color={currentColors.primary} />
+          </TouchableOpacity>
+        </View>
       </Animated.View>
 
-      {/* ✅ Mock Data Banner */}
+      {/* Mock Data Banner */}
       {usingMockData && (
-        <Animated.View 
-          entering={FadeIn.duration(300)}
-          style={[styles.mockDataBanner, { backgroundColor: currentColors.warning + '15' }]}
+        <Animated.View
+          entering={FadeInUp.delay(100).duration(300)}
+          style={[styles.mockDataBanner, { backgroundColor: Colors.warning + '15' }]}
         >
-          <IconSymbol 
-            name="info.circle.fill" 
-            size={20} 
-            color={currentColors.warning}
-          />
-          <Text style={[styles.mockDataText, { color: currentColors.warning }]}>
-            {isDemoMode ? 'Demo Mode - Sample Videos' : 'Using sample data - API unavailable'}
+          <IconSymbol name="info.circle.fill" size={16} color={Colors.warning} />
+          <Text style={[styles.mockDataText, { color: Colors.warning }]}>
+            {isDemoMode ? 'Demo Mode' : 'Sample Data'}
           </Text>
         </Animated.View>
       )}
@@ -396,8 +407,8 @@ function VideosScreenContent() {
         ListEmptyComponent={
           !isLoading ? (
             <Animated.View entering={FadeInUp.duration(400)} style={styles.emptyContainer}>
-              <View style={[styles.emptyIconContainer, { backgroundColor: `${currentColors.primary}20` }]}>
-                <IconSymbol name="film.fill" size={64} color={currentColors.primary} />
+              <View style={[styles.emptyIconContainer, { backgroundColor: Colors.primary + '15' }]}>
+                <IconSymbol name="film.fill" size={64} color={Colors.primary} />
               </View>
               <Text style={[styles.emptyTitle, { color: currentColors.text }]}>
                 No Videos Yet
@@ -405,16 +416,13 @@ function VideosScreenContent() {
               <Text style={[styles.emptyMessage, { color: currentColors.textSecondary }]}>
                 Upload your first match highlight to get started
               </Text>
-              <TouchableOpacity onPress={handleUploadPress} activeOpacity={0.8}>
-                <LinearGradient
-                  colors={Gradients.primary.colors}
-                  start={Gradients.primary.start}
-                  end={Gradients.primary.end}
-                  style={[styles.emptyButton, Shadows.primaryGlow]}
-                >
-                  <IconSymbol name="plus.circle.fill" size={20} color="#FFFFFF" />
-                  <Text style={styles.emptyButtonText}>Upload Video</Text>
-                </LinearGradient>
+              <TouchableOpacity
+                style={[styles.emptyButton, { backgroundColor: Colors.primary }]}
+                onPress={handleUploadPress}
+                activeOpacity={0.7}
+              >
+                <IconSymbol name="plus.circle.fill" size={20} color="#FFFFFF" />
+                <Text style={styles.emptyButtonText}>Upload Video</Text>
               </TouchableOpacity>
             </Animated.View>
           ) : null
@@ -433,77 +441,77 @@ export default function VideosScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { 
+  container: {
     flex: 1,
   },
 
-  // Header
+  // Header - Matching Dashboard
   header: {
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.xl,
-  },
-  headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    gap: Spacing.md,
   },
   logoBox: {
-    width: 48,
-    height: 48,
-    borderRadius: BorderRadius.md,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    ...Shadows.small,
+  },
+  logoText: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#FFFFFF',
   },
   headerTitle: {
-    fontSize: Typography.title3,
+    fontSize: Typography.headline,
     fontWeight: '700',
-    letterSpacing: 0.5,
   },
   headerSubtitle: {
-    fontSize: Typography.caption,
-    fontWeight: '600',
-    marginTop: 2,
+    fontSize: Typography.footnote,
+    fontWeight: '500',
   },
-  uploadButton: {
+  headerRight: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.lg,
+    gap: Spacing.sm,
   },
-  uploadText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: Typography.callout,
+  headerButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.small,
   },
 
-  // ✅ Mock Data Banner
+  // Mock Data Banner
   mockDataBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
-    padding: Spacing.md,
-    marginHorizontal: Spacing.xl,
-    marginTop: Spacing.md,
-    borderRadius: BorderRadius.lg,
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.sm,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.sm,
+    borderRadius: BorderRadius.md,
   },
-
   mockDataText: {
-    flex: 1,
-    fontSize: Typography.callout,
+    fontSize: Typography.footnote,
     fontWeight: '600',
   },
 
   // List
   listContent: {
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
     paddingBottom: Spacing.xxxl,
   },
 
@@ -630,17 +638,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  loadingGradient: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Spacing.lg,
+    gap: Spacing.md,
   },
   loadingText: {
-    fontSize: Typography.body,
+    fontSize: Typography.callout,
     fontWeight: '600',
   },
 
@@ -674,15 +675,17 @@ const styles = StyleSheet.create({
   retryButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: Spacing.sm,
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.md,
     borderRadius: BorderRadius.lg,
+    ...Shadows.small,
   },
   retryText: {
     color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: Typography.body,
+    fontSize: Typography.subhead,
   },
 
   // Empty State
@@ -716,14 +719,17 @@ const styles = StyleSheet.create({
   emptyButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: Spacing.sm,
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.md,
     borderRadius: BorderRadius.lg,
+    backgroundColor: Colors.primary,
+    ...Shadows.small,
   },
   emptyButtonText: {
     color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: Typography.body,
+    fontSize: Typography.subhead,
   },
 });

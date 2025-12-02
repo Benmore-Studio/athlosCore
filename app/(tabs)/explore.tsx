@@ -623,7 +623,7 @@ function PlayerAnalyticsContent() {
                       styles.playerOptionName,
                       { color: selectedPlayer?.id === player.id ? '#FFFFFF' : currentColors.text }
                     ]}>
-                      {player.name.split(' ')[0]}
+                      {player.name?.split(' ')[0] || ''}
                     </Text>
                     <Text style={[
                       styles.playerPosition,
@@ -787,7 +787,7 @@ function PlayerAnalyticsContent() {
                 <View style={styles.developmentHeaderText}>
                   <Text style={styles.developmentTitle}>Development Areas</Text>
                   <Text style={styles.developmentSubtitle}>
-                    AI-powered recommendations for {selectedPlayer.name.split(' ')[0]}
+                    AI-powered recommendations for {selectedPlayer?.name?.split(' ')[0] || 'Player'}
                   </Text>
                 </View>
               </View>
@@ -1588,7 +1588,7 @@ const styles = StyleSheet.create({
 //                       styles.playerOptionName,
 //                       { color: selectedPlayer.id === player.id ? 'dark' : currentColors.text }
 //                     ]}>
-//                       {player.name.split(' ')[0]}
+//                       {player.name?.split(' ')[0] || ''}
 //                     </Text>
 //                     <Text style={[
 //                       styles.playerPosition,

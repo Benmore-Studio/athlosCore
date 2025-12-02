@@ -114,16 +114,35 @@ const authService = {
 
   async logout(): Promise<void> {
     try {
-      console.log('🚪 Clearing auth data...');
-      
-      // ✅ Clear stored data
-      await AsyncStorage.multiRemove([AUTH_TOKEN_KEY, USER_DATA_KEY]);
-      
-      console.log('✅ Auth data cleared');
+      console.log('🚪 Logging out...');
+
+      // Get all keys to check what we're clearing
+      const allKeys = await AsyncStorage.getAllKeys();
+      const authKeys = allKeys.filter(key =>
+        key === AUTH_TOKEN_KEY ||
+        key === USER_DATA_KEY ||
+        key === 'current_org_id'
+      );
+
+      if (__DEV__) {
+        console.log('🔍 Found auth keys to clear:', authKeys);
+      }
+
+      // Clear auth-related data
+      await AsyncStorage.multiRemove([AUTH_TOKEN_KEY, USER_DATA_KEY, 'current_org_id']);
+
+      console.log('✅ Logout successful - auth data cleared');
     } catch (error) {
       console.error('❌ Logout error:', error);
+
       // Force clear even on error
-      await AsyncStorage.multiRemove([AUTH_TOKEN_KEY, USER_DATA_KEY]);
+      try {
+        await AsyncStorage.multiRemove([AUTH_TOKEN_KEY, USER_DATA_KEY, 'current_org_id']);
+      } catch (forceError) {
+        console.error('❌ Failed to force clear auth data:', forceError);
+      }
+
+      throw error;
     }
   },
 

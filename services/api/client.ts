@@ -1,5 +1,5 @@
 // File: services/api/client.ts
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, AxiosError } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { API_CONFIG } from '@/config/api';
@@ -13,22 +13,13 @@ const apiClient: AxiosInstance = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
+  // CRITICAL: Add these for React Native
+  validateStatus: (status) => status < 500, // Don't throw on 4xx errors
 });
 
 // ✅ Development mode logging
 if (__DEV__) {
-  console.log('═══════════════════════════════════════════════════════');
-  console.log('🚀 AthlosCore API Client');
-  console.log('═══════════════════════════════════════════════════════');
-  console.log('Environment: DEVELOPMENT');
-  console.log('API Base URL:', API_CONFIG.BASE_URL);
-  console.log('Platform:', Platform.OS);
-  console.log('');
-  console.log('SSL Configuration:');
-  console.log('  ✅ Handled by Expo via app.config.js');
-  console.log('  ✅ iOS: NSExceptionDomains configured');
-  console.log('  ✅ Android: usesCleartextTraffic enabled');
-  console.log('═══════════════════════════════════════════════════════');
+  console.log('🚀 API Client initialized:', API_CONFIG.BASE_URL);
 }
 
 // Request interceptor
@@ -40,11 +31,7 @@ apiClient.interceptors.request.use(
     }
 
     if (__DEV__) {
-      console.log('📤 API Request:', {
-        method: config.method?.toUpperCase(),
-        url: `${config.baseURL}${config.url}`,
-        hasAuth: !!token,
-      });
+      console.log(`📤 ${config.method?.toUpperCase()} ${config.url}`);
     }
 
     return config;
@@ -59,14 +46,12 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => {
     if (__DEV__) {
-      console.log('✅ API Response:', {
-        status: response.status,
-        url: response.config.url,
-      });
+      console.log(`✅ ${response.status} ${response.config.url}`);
     }
     return response;
   },
-  async (error) => {
+  async (error: AxiosError) => {
+    // Log concise error
     if (__DEV__) {
       console.error('═══════════════════════════════════════════════════════');
       console.error('❌ API ERROR');
@@ -94,65 +79,40 @@ apiClient.interceptors.response.use(
     }
 
     // ✅ SSL Error Detection
-    const isSSLError = 
+    const isSSLError =
       error.code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' ||
       error.code === 'CERT_HAS_EXPIRED' ||
       error.code === 'DEPTH_ZERO_SELF_SIGNED_CERT' ||
+      error.code === 'SELF_SIGNED_CERT_IN_CHAIN' ||
       error.message?.toLowerCase().includes('certificate') ||
-      error.message?.toLowerCase().includes('ssl');
+      error.message?.toLowerCase().includes('ssl') ||
+      error.message?.toLowerCase().includes('tls');
 
     if (isSSLError) {
-      console.error('🔒 SSL Certificate Error Detected');
-      console.error('Platform:', Platform.OS);
-      console.error('');
-      console.error('EXPO TROUBLESHOOTING:');
-      console.error('1. Check app.config.js has correct configuration');
-      console.error('2. Run: npx expo prebuild --clean');
-      console.error('3. Rebuild: npx expo run:ios or npx expo run:android');
-      console.error('4. If using Expo Go, SSL exceptions may not work');
-      console.error('   → Use Development Build instead');
-      
       error.userMessage = Platform.select({
-        ios: 'SSL Error on iOS. Ensure app.config.js has NSExceptionDomains configured and rebuild with "npx expo run:ios"',
-        android: 'SSL Error on Android. Ensure app.config.js has usesCleartextTraffic enabled and rebuild with "npx expo run:android"',
+        ios: 'SSL Error. Rebuild with: npx expo run:ios',
+        android: 'SSL Error. Check network_security_config.xml',
         default: 'SSL Certificate Error',
       });
-    }
-
-    // Network errors
-    if (error.code === 'ERR_NETWORK') {
-      console.error('🌐 Network Error');
-      console.error('URL:', `${error.config?.baseURL}${error.config?.url}`);
-      error.userMessage = 'Cannot connect to server. Check your connection.';
-    }
-
-    // Timeout errors
-    if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
-      console.error('⏱️ Timeout Error');
+    } else if (error.message === 'Network Error' || error.code === 'ERR_NETWORK') {
+      error.userMessage = 'Cannot connect to server.';
+    } else if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
       error.userMessage = 'Server took too long to respond.';
-    }
-
-    // HTTP status errors
-    if (error.response) {
-      console.error('Status:', error.response.status);
-      console.error('Data:', error.response.data);
-      
+    } else if (error.response) {
       switch (error.response.status) {
         case 401:
           await AsyncStorage.removeItem('auth_token');
-          error.userMessage = error.response.data || 'Invalid email or password';
+          error.userMessage = error.response.data?.error || 'Invalid email or password';
           break;
         case 409:
           error.userMessage = error.response.data?.error || 'User already exists';
           break;
         case 500:
-          error.userMessage = 'Server error. Please try again.';
+          error.userMessage = error.response.data?.error || 'Server error. Please try again.';
           break;
+        default:
+          error.userMessage = error.response.data?.error || `Error: ${error.response.status}`;
       }
-    }
-
-    if (__DEV__) {
-      console.error('═══════════════════════════════════════════════════════');
     }
     
     return Promise.reject(error);

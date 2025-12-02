@@ -50,7 +50,7 @@ function RootLayoutNav() {
         <StatusBar style={isDark ? 'light' : 'dark'} />
       </NavigationThemeProvider>
       {/* DevPerformanceMonitor has access to all providers here */}
-      <DevPerformanceMonitor />
+      {/* <DevPerformanceMonitor /> */}
     </>
   );
 }
