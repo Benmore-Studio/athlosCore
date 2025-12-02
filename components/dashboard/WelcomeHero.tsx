@@ -50,13 +50,13 @@ export default function WelcomeHero({
       entering={ZoomIn.delay(600).duration(800).springify()}
       // ✅ ADD: Card accessibility
       accessibilityRole="summary"
-      accessibilityLabel={accessibilityLabel || `Welcome back, ${coachName.split(' ')[0]}. Team record: ${record}. Next game: ${nextGame}`}
+      accessibilityLabel={accessibilityLabel || `Welcome back, ${coachName?.split(' ')[0] || 'Coach'}. Team record: ${record}. Next game: ${nextGame}`}
     >
       <Card variant="gradient" padding="large" style={styles.card}>
         <View style={styles.header}>
           <View style={styles.textContainer}>
             <Text style={styles.title}>
-              Welcome back, {coachName.split(' ')[0]}! 🏀
+              Welcome back, {coachName?.split(' ')[0] || 'Coach'}!
             </Text>
             <View style={styles.stats}>
               <View 

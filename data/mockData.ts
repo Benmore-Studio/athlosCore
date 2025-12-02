@@ -395,3 +395,132 @@ export const onboardingSteps = [
     description: 'Use data-driven insights to create targeted training plans and improve team execution',
   },
 ];
+
+// ============================================
+// NEW: Dashboard Redesign Mock Data
+// ============================================
+
+import type { AIInsight } from '@/components/dashboard/AIInsightsCard';
+import type { VideoStatus } from '@/components/dashboard/VideoStatusCard';
+import type { TopPerformer } from '@/components/dashboard/TopPerformersCard';
+import type { UpcomingGame } from '@/components/dashboard/UpcomingGameCard';
+
+// AI Insights - Coach Vision AI suggestions
+export const mockAIInsights: AIInsight[] = [
+  {
+    id: 'insight-1',
+    type: 'improvement',
+    title: 'Ball Security Improving',
+    description: 'Turnover rate decreased 15% in the last 3 games. Keep emphasizing the outlet passes.',
+    metric: {
+      value: 11.5,
+      change: -15,
+      unit: '%',
+    },
+  },
+  {
+    id: 'insight-2',
+    type: 'trend',
+    title: 'Marcus Johnson Trending Up',
+    description: '3-point percentage improved to 42% this month. Consider more plays utilizing his shooting.',
+    metric: {
+      value: 42,
+      change: 8,
+      unit: '%',
+    },
+    relatedPlayerId: '1',
+  },
+  {
+    id: 'insight-3',
+    type: 'recommendation',
+    title: 'Zone Defense Opportunity',
+    description: 'Opponents struggling against 2-3 zone. Success rate 73% when deployed in 4th quarter.',
+  },
+  {
+    id: 'insight-4',
+    type: 'alert',
+    title: 'Foul Trouble Pattern',
+    description: 'Jaylen Davis averaging 3.2 fouls in first half. Consider rotation adjustments.',
+    relatedPlayerId: '4',
+  },
+];
+
+// Video Processing Status
+export const mockVideoStatuses: VideoStatus[] = [
+  {
+    videoId: 'vid-001',
+    title: 'vs Central Warriors',
+    status: 'completed',
+    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
+  },
+  {
+    videoId: 'vid-002',
+    title: 'vs North Panthers',
+    status: 'processing',
+    progress: 45,
+    createdAt: new Date(Date.now() - 1 * 60 * 60 * 1000), // 1 hour ago
+  },
+  {
+    videoId: 'vid-003',
+    title: 'vs East Tigers',
+    status: 'pending',
+    createdAt: new Date(Date.now() - 30 * 60 * 1000), // 30 min ago
+  },
+];
+
+// Top Performers
+export const mockTopPerformers: TopPerformer[] = [
+  {
+    playerId: '1',
+    name: 'Marcus Johnson',
+    jerseyNumber: 5,
+    avatarUrl: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=100&h=100&fit=crop&crop=face',
+    statLabel: 'PPG',
+    statValue: 18.4,
+    trend: 'up',
+    position: 'PG',
+  },
+  {
+    playerId: '4',
+    name: 'Jaylen Davis',
+    jerseyNumber: 10,
+    avatarUrl: 'https://images.unsplash.com/photo-1594736797933-d0401ba2fe65?w=100&h=100&fit=crop&crop=face',
+    statLabel: 'REB',
+    statValue: 9.6,
+    trend: 'stable',
+    position: 'C',
+  },
+  {
+    playerId: '5',
+    name: 'Antonio Rodriguez',
+    jerseyNumber: 12,
+    avatarUrl: 'https://images.unsplash.com/photo-1552374196-c4e7ffc6e126?w=100&h=100&fit=crop&crop=face',
+    statLabel: 'AST',
+    statValue: 4.2,
+    trend: 'up',
+    position: 'SG',
+  },
+  {
+    playerId: '3',
+    name: 'Damon Clarke',
+    jerseyNumber: 23,
+    avatarUrl: 'https://images.unsplash.com/photo-1607990281513-2c110a25bd8c?w=100&h=100&fit=crop&crop=face',
+    statLabel: 'STL',
+    statValue: 2.1,
+    trend: 'up',
+    position: 'SF',
+  },
+];
+
+// Upcoming Game
+export const mockUpcomingGame: UpcomingGame = {
+  gameId: 'upcoming-001',
+  opponent: 'Central Warriors',
+  opponentTeamId: 'central-warriors',
+  dateTime: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000), // 4 days from now
+  venue: 'Lincoln High School Gymnasium',
+  isHome: true,
+};
+
+// Alternative: No upcoming game scenario
+export const mockNoUpcomingGame: UpcomingGame | null = null;

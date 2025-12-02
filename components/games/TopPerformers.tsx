@@ -76,7 +76,7 @@ export default function TopPerformers({
                 variant="gradient"
               />
               <Text style={[styles.name, { color: currentColors.text }]}>
-                {performer.player.name.split(' ')[0]}
+                {performer.player.name?.split(' ')[0] || ''}
               </Text>
               <View 
                 style={[styles.statBadge, { backgroundColor: currentColors.primary }]}

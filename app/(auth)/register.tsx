@@ -1,12 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import { TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Modal, FlatList } from 'react-native';
+import {
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+  Modal,
+  FlatList,
+  View,
+  Text,
+  KeyboardAvoidingView,
+  Platform,
+  useWindowDimensions,
+  AccessibilityInfo,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-import Animated, { FadeInUp } from 'react-native-reanimated';
+import Animated, { FadeInUp, FadeInDown } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
-import { ThemedView } from '@/components/themed-view';
-import { ThemedText } from '@/components/themed-text';
-import authService, { Organization } from '@/services/api/authService';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import authService from '@/services/api/authService';
+import { Colors, BorderRadius, Spacing, Typography, Shadows } from '@/constants/theme';
+
+interface Organization {
+  org_id: string;
+  name: string;
+  created_at: string;
+  last_updated_at: string;
+}
 
 export default function RegisterScreen() {
   const [name, setName] = useState('');
@@ -18,7 +40,14 @@ export default function RegisterScreen() {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [showOrgModal, setShowOrgModal] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const router = useRouter();
+  const { width, height } = useWindowDimensions();
+
+  const isTablet = width >= 768;
+  const isLandscape = width > height;
 
   useEffect(() => {
     fetchOrganizations();
@@ -27,18 +56,16 @@ export default function RegisterScreen() {
   const fetchOrganizations = async () => {
     try {
       setLoadingOrgs(true);
-      const data = await authService.getOrganizations();
+      const data = await authService.getOrgsList();
       setOrganizations(data);
     } catch (error: any) {
-      console.log('Could not fetch organizations (user may not be logged in yet)');
-      // Don't show error - it's optional
+      console.log('Could not fetch organizations');
     } finally {
       setLoadingOrgs(false);
     }
   };
 
   const handleRegister = async () => {
-    // Validation
     if (!name || !email || !password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
@@ -54,7 +81,6 @@ export default function RegisterScreen() {
       return;
     }
 
-    // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       Alert.alert('Error', 'Please enter a valid email address');
@@ -63,7 +89,6 @@ export default function RegisterScreen() {
 
     setLoading(true);
     try {
-      // Call the registration API using authService
       const response = await authService.register({
         full_name: name,
         email: email.toLowerCase().trim(),
@@ -71,32 +96,25 @@ export default function RegisterScreen() {
         org_ids: selectedOrg ? [selectedOrg.org_id] : undefined,
       });
 
-      console.log('Registration successful:', response);
+      AccessibilityInfo.announceForAccessibility('Account created successfully');
 
-      // Navigate to main app or org selection
       if (selectedOrg) {
-        // User selected an org, go to main app
         router.replace('/(tabs)');
       } else if (response.organizations && response.organizations.length > 0) {
-        // User has orgs but didn't select one, show org selection
         router.replace('/(auth)/org-selection');
       } else {
-        // No orgs, go to main app
         router.replace('/(tabs)');
       }
 
     } catch (error: any) {
-      console.error('Registration error:', error);
-      
-      // Handle specific error cases
       const errorMessage = error.response?.data?.message || error.message;
-      
+
       if (errorMessage?.includes('already exists') || errorMessage?.includes('duplicate')) {
         Alert.alert('Error', 'An account with this email already exists');
-      } else if (errorMessage?.includes('network') || errorMessage?.includes('fetch')) {
-        Alert.alert('Error', 'Network error. Please check your connection and try again');
+      } else if (errorMessage?.includes('network')) {
+        Alert.alert('Error', 'Network error. Please check your connection.');
       } else {
-        Alert.alert('Error', errorMessage || 'Registration failed. Please try again');
+        Alert.alert('Error', errorMessage || 'Registration failed. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -105,195 +123,371 @@ export default function RegisterScreen() {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      year: 'numeric' 
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
     });
   };
 
   const renderOrgItem = ({ item }: { item: Organization }) => (
     <TouchableOpacity
-      style={styles.orgItem}
+      style={[
+        styles.orgItem,
+        selectedOrg?.org_id === item.org_id && styles.orgItemSelected,
+      ]}
       onPress={() => {
         setSelectedOrg(item);
         setShowOrgModal(false);
       }}
       activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={`Select ${item.name} organization`}
     >
-      <ThemedView style={styles.orgItemContent}>
-        <ThemedView style={styles.orgItemIcon}>
-          <LinearGradient
-            colors={['#E97A42', '#F59E0B']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.orgIconGradient}
-          >
-            <ThemedText style={styles.orgIconText}>
-              {item.name.charAt(0).toUpperCase()}
-            </ThemedText>
-          </LinearGradient>
-        </ThemedView>
-        <ThemedView style={styles.orgItemInfo}>
-          <ThemedText style={styles.orgItemName}>{item.name}</ThemedText>
-          <ThemedText style={styles.orgItemDate}>
-            Created {formatDate(item.created_at)}
-          </ThemedText>
-        </ThemedView>
-      </ThemedView>
+      <LinearGradient
+        colors={[Colors.primary, '#F59E0B']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.orgIconGradient}
+      >
+        <Text style={styles.orgIconText}>
+          {item.name.charAt(0).toUpperCase()}
+        </Text>
+      </LinearGradient>
+      <View style={styles.orgItemInfo}>
+        <Text style={styles.orgItemName}>{item.name}</Text>
+        <Text style={styles.orgItemDate}>Created {formatDate(item.created_at)}</Text>
+      </View>
+      {selectedOrg?.org_id === item.org_id && (
+        <IconSymbol name="checkmark.circle.fill" size={24} color={Colors.primary} />
+      )}
     </TouchableOpacity>
   );
 
   return (
-    <ThemedView style={styles.container}>
+    <View style={styles.container}>
+      {/* Navy background */}
       <LinearGradient
-        colors={['#FFFFFF', '#FFF5F0', '#E97A42']}
+        colors={['#1E2A3A', '#2D3E52', '#1E2A3A']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={styles.gradient}
-      >
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <Animated.View entering={FadeInUp.delay(200).duration(1000)} style={styles.header}>
-            <ThemedView style={styles.logoContainer}>
-              <LinearGradient
-                colors={['#E97A42', '#F59E0B']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.logoBox}
-              >
-                <ThemedText style={styles.logoText}>A</ThemedText>
-              </LinearGradient>
-            </ThemedView>
-            <ThemedText type="title" style={styles.title}>Create Account</ThemedText>
-            <ThemedText style={styles.subtitle}>Join AthlosCore™ today</ThemedText>
-          </Animated.View>
+        style={StyleSheet.absoluteFill}
+      />
 
-          <Animated.View entering={FadeInUp.delay(400).duration(1000)} style={styles.formContainer}>
-            <BlurView intensity={20} tint="light" style={styles.glassCard}>
-              <ThemedView style={styles.inputContainer}>
-                <ThemedText style={styles.label}>Full Name</ThemedText>
-                <TextInput
-                  style={styles.input}
-                  placeholder="John Doe"
-                  placeholderTextColor="#999999"
-                  value={name}
-                  onChangeText={setName}
-                  editable={!loading}
-                  autoCapitalize="words"
-                />
-              </ThemedView>
-
-              <ThemedView style={styles.inputContainer}>
-                <ThemedText style={styles.label}>Email</ThemedText>
-                <TextInput
-                  style={styles.input}
-                  placeholder="your@email.com"
-                  placeholderTextColor="#999999"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  editable={!loading}
-                  autoCorrect={false}
-                />
-              </ThemedView>
-
-              <ThemedView style={styles.inputContainer}>
-                <ThemedText style={styles.label}>Password</ThemedText>
-                <TextInput
-                  style={styles.input}
-                  placeholder="••••••••"
-                  placeholderTextColor="#999999"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  editable={!loading}
-                  autoCapitalize="none"
-                />
-              </ThemedView>
-
-              <ThemedView style={styles.inputContainer}>
-                <ThemedText style={styles.label}>Confirm Password</ThemedText>
-                <TextInput
-                  style={styles.input}
-                  placeholder="••••••••"
-                  placeholderTextColor="#999999"
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  secureTextEntry
-                  editable={!loading}
-                  autoCapitalize="none"
-                />
-              </ThemedView>
-
-              <ThemedView style={styles.inputContainer}>
-                <ThemedView style={styles.labelContainer}>
-                  <ThemedText style={styles.label}>Organization</ThemedText>
-                  <ThemedText style={styles.optionalLabel}>(Optional)</ThemedText>
-                </ThemedView>
-                <TouchableOpacity
-                  style={styles.input}
-                  onPress={() => setShowOrgModal(true)}
-                  disabled={loading || loadingOrgs || organizations.length === 0}
-                  activeOpacity={0.7}
+      <SafeAreaView style={styles.safeArea}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardView}
+        >
+          <ScrollView
+            contentContainerStyle={[
+              styles.scrollContent,
+              isTablet && isLandscape && styles.scrollContentLandscape,
+            ]}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={[
+              styles.contentContainer,
+              isTablet && isLandscape && styles.contentContainerLandscape,
+            ]}>
+              {/* Branding section (tablet landscape) */}
+              {isTablet && isLandscape && (
+                <Animated.View
+                  entering={FadeInDown.delay(100).duration(600)}
+                  style={styles.brandingSection}
                 >
-                  {loadingOrgs ? (
-                    <ActivityIndicator size="small" color="#E97A42" />
-                  ) : (
-                    <ThemedText style={selectedOrg ? styles.selectedOrgText : styles.placeholderText}>
-                      {selectedOrg ? selectedOrg.name : organizations.length > 0 ? 'Select an organization' : 'No organizations available'}
-                    </ThemedText>
-                  )}
-                </TouchableOpacity>
-                {selectedOrg && (
-                  <TouchableOpacity
-                    style={styles.clearButton}
-                    onPress={() => setSelectedOrg(null)}
+                  <LinearGradient
+                    colors={[Colors.primary, '#F59E0B']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.largeLogo}
                   >
-                    <ThemedText style={styles.clearButtonText}>Clear selection</ThemedText>
-                  </TouchableOpacity>
-                )}
-              </ThemedView>
+                    <Text style={styles.largeLogoText}>A</Text>
+                  </LinearGradient>
+                  <Text style={styles.brandTitle}>AthlosCore</Text>
+                  <Text style={styles.brandTagline}>
+                    AI-Powered Basketball Analytics
+                  </Text>
+                  <View style={styles.featureList}>
+                    <FeatureItem icon="video.fill" text="Smart Game Film Analysis" />
+                    <FeatureItem icon="chart.bar.fill" text="Player Performance Insights" />
+                    <FeatureItem icon="star.fill" text="AI-Generated Highlights" />
+                  </View>
+                </Animated.View>
+              )}
 
-              <TouchableOpacity 
-                style={[styles.button, loading && styles.buttonDisabled]}
-                onPress={handleRegister}
-                disabled={loading}
-                activeOpacity={0.8}
-              >
-                <LinearGradient
-                  colors={loading ? ['#CCCCCC', '#999999'] : ['#E97A42', '#F59E0B']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.buttonGradient}
+              {/* Form section */}
+              <View style={[
+                styles.formSection,
+                isTablet && isLandscape && styles.formSectionLandscape,
+              ]}>
+                <Animated.View
+                  entering={FadeInUp.delay(200).duration(600)}
+                  style={[styles.formCard, isTablet && styles.formCardTablet]}
                 >
-                  <ThemedText style={styles.buttonText}>
-                    {loading ? 'Creating Account...' : 'Create Account'}
-                  </ThemedText>
-                </LinearGradient>
-              </TouchableOpacity>
+                  {/* Header */}
+                  {(!isTablet || !isLandscape) && (
+                    <View style={styles.headerSection}>
+                      <LinearGradient
+                        colors={[Colors.primary, '#F59E0B']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.logo}
+                      >
+                        <Text style={styles.logoText}>A</Text>
+                      </LinearGradient>
+                      <Text style={styles.title}>Create Account</Text>
+                      <Text style={styles.subtitle}>Join AthlosCore today</Text>
+                    </View>
+                  )}
 
-              <ThemedView style={styles.termsContainer}>
-                <ThemedText style={styles.termsText}>
-                  By signing up, you agree to our{' '}
-                  <ThemedText style={styles.termsLink}>Terms</ThemedText> and{' '}
-                  <ThemedText style={styles.termsLink}>Privacy Policy</ThemedText>
-                </ThemedText>
-              </ThemedView>
+                  {isTablet && isLandscape && (
+                    <View style={styles.headerSection}>
+                      <Text style={styles.title}>Create Account</Text>
+                      <Text style={styles.subtitle}>Fill in your details to get started</Text>
+                    </View>
+                  )}
 
-              <TouchableOpacity 
-                style={styles.signupLink}
-                onPress={() => router.push('/(auth)/login')}
-                disabled={loading}
-              >
-                <ThemedText style={styles.signupText}>
-                  Already have an account? <ThemedText style={styles.signupBold}>Sign In</ThemedText>
-                </ThemedText>
-              </TouchableOpacity>
-            </BlurView>
-          </Animated.View>
-        </ScrollView>
-      </LinearGradient>
+                  {/* Full Name */}
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Full Name</Text>
+                    <View style={[
+                      styles.inputWrapper,
+                      focusedInput === 'name' && styles.inputWrapperFocused,
+                    ]}>
+                      <IconSymbol
+                        name="person.fill"
+                        size={20}
+                        color={focusedInput === 'name' ? Colors.primary : '#6B7280'}
+                      />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="John Doe"
+                        placeholderTextColor="#9CA3AF"
+                        value={name}
+                        onChangeText={setName}
+                        autoCapitalize="words"
+                        editable={!loading}
+                        onFocus={() => setFocusedInput('name')}
+                        onBlur={() => setFocusedInput(null)}
+                        accessibilityLabel="Full name"
+                        accessibilityHint="Enter your full name"
+                      />
+                    </View>
+                  </View>
+
+                  {/* Email */}
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Email</Text>
+                    <View style={[
+                      styles.inputWrapper,
+                      focusedInput === 'email' && styles.inputWrapperFocused,
+                    ]}>
+                      <IconSymbol
+                        name="envelope.fill"
+                        size={20}
+                        color={focusedInput === 'email' ? Colors.primary : '#6B7280'}
+                      />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="coach@example.com"
+                        placeholderTextColor="#9CA3AF"
+                        value={email}
+                        onChangeText={setEmail}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        editable={!loading}
+                        onFocus={() => setFocusedInput('email')}
+                        onBlur={() => setFocusedInput(null)}
+                        accessibilityLabel="Email address"
+                        accessibilityHint="Enter your email address"
+                      />
+                    </View>
+                  </View>
+
+                  {/* Password */}
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Password</Text>
+                    <View style={[
+                      styles.inputWrapper,
+                      focusedInput === 'password' && styles.inputWrapperFocused,
+                    ]}>
+                      <IconSymbol
+                        name="lock.fill"
+                        size={20}
+                        color={focusedInput === 'password' ? Colors.primary : '#6B7280'}
+                      />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="••••••••"
+                        placeholderTextColor="#9CA3AF"
+                        value={password}
+                        onChangeText={setPassword}
+                        secureTextEntry={!showPassword}
+                        autoCapitalize="none"
+                        editable={!loading}
+                        onFocus={() => setFocusedInput('password')}
+                        onBlur={() => setFocusedInput(null)}
+                        accessibilityLabel="Password"
+                        accessibilityHint="Enter a password with at least 6 characters"
+                      />
+                      <TouchableOpacity
+                        onPress={() => setShowPassword(!showPassword)}
+                        accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                        accessibilityRole="button"
+                      >
+                        <IconSymbol
+                          name={showPassword ? 'eye.slash.fill' : 'eye.fill'}
+                          size={20}
+                          color="#6B7280"
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Confirm Password */}
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Confirm Password</Text>
+                    <View style={[
+                      styles.inputWrapper,
+                      focusedInput === 'confirmPassword' && styles.inputWrapperFocused,
+                    ]}>
+                      <IconSymbol
+                        name="lock.fill"
+                        size={20}
+                        color={focusedInput === 'confirmPassword' ? Colors.primary : '#6B7280'}
+                      />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="••••••••"
+                        placeholderTextColor="#9CA3AF"
+                        value={confirmPassword}
+                        onChangeText={setConfirmPassword}
+                        secureTextEntry={!showConfirmPassword}
+                        autoCapitalize="none"
+                        editable={!loading}
+                        onFocus={() => setFocusedInput('confirmPassword')}
+                        onBlur={() => setFocusedInput(null)}
+                        accessibilityLabel="Confirm password"
+                        accessibilityHint="Re-enter your password"
+                      />
+                      <TouchableOpacity
+                        onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                        accessibilityLabel={showConfirmPassword ? 'Hide password' : 'Show password'}
+                        accessibilityRole="button"
+                      >
+                        <IconSymbol
+                          name={showConfirmPassword ? 'eye.slash.fill' : 'eye.fill'}
+                          size={20}
+                          color="#6B7280"
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Organization */}
+                  <View style={styles.inputGroup}>
+                    <View style={styles.labelRow}>
+                      <Text style={styles.label}>Organization</Text>
+                      <Text style={styles.optionalLabel}>(Optional)</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[
+                        styles.inputWrapper,
+                        focusedInput === 'org' && styles.inputWrapperFocused,
+                      ]}
+                      onPress={() => setShowOrgModal(true)}
+                      disabled={loading || loadingOrgs || organizations.length === 0}
+                      accessibilityRole="button"
+                      accessibilityLabel="Select organization"
+                    >
+                      <IconSymbol
+                        name="building.2.fill"
+                        size={20}
+                        color={selectedOrg ? Colors.primary : '#6B7280'}
+                      />
+                      {loadingOrgs ? (
+                        <ActivityIndicator size="small" color={Colors.primary} style={styles.orgLoader} />
+                      ) : (
+                        <Text style={[
+                          styles.orgText,
+                          !selectedOrg && styles.orgPlaceholder,
+                        ]}>
+                          {selectedOrg
+                            ? selectedOrg.name
+                            : organizations.length > 0
+                            ? 'Select an organization'
+                            : 'No organizations available'}
+                        </Text>
+                      )}
+                      {organizations.length > 0 && (
+                        <IconSymbol name="chevron.down" size={16} color="#6B7280" />
+                      )}
+                    </TouchableOpacity>
+                    {selectedOrg && (
+                      <TouchableOpacity
+                        onPress={() => setSelectedOrg(null)}
+                        style={styles.clearOrgButton}
+                        accessibilityLabel="Clear organization selection"
+                        accessibilityRole="button"
+                      >
+                        <Text style={styles.clearOrgText}>Clear selection</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  {/* Create Account Button */}
+                  <TouchableOpacity
+                    onPress={handleRegister}
+                    disabled={loading}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel={loading ? 'Creating account' : 'Create account'}
+                    accessibilityState={{ disabled: loading }}
+                  >
+                    <LinearGradient
+                      colors={loading ? ['#9CA3AF', '#6B7280'] : [Colors.primary, '#F59E0B']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={[styles.createButton, loading && styles.createButtonDisabled]}
+                    >
+                      {loading ? (
+                        <Text style={styles.createButtonText}>Creating Account...</Text>
+                      ) : (
+                        <>
+                          <Text style={styles.createButtonText}>Create Account</Text>
+                          <IconSymbol name="arrow.right" size={20} color="#FFFFFF" />
+                        </>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+
+                  {/* Terms */}
+                  <Text style={styles.termsText}>
+                    By signing up, you agree to our{' '}
+                    <Text style={styles.termsLink}>Terms</Text> and{' '}
+                    <Text style={styles.termsLink}>Privacy Policy</Text>
+                  </Text>
+
+                  {/* Sign In Link */}
+                  <View style={styles.signInContainer}>
+                    <Text style={styles.signInText}>Already have an account? </Text>
+                    <TouchableOpacity
+                      onPress={() => router.push('/(auth)/login')}
+                      disabled={loading}
+                      accessibilityRole="link"
+                      accessibilityLabel="Sign in to existing account"
+                    >
+                      <Text style={styles.signInLink}>Sign In</Text>
+                    </TouchableOpacity>
+                  </View>
+                </Animated.View>
+              </View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
 
       {/* Organization Selection Modal */}
       <Modal
@@ -302,17 +496,19 @@ export default function RegisterScreen() {
         animationType="slide"
         onRequestClose={() => setShowOrgModal(false)}
       >
-        <ThemedView style={styles.modalOverlay}>
-          <ThemedView style={styles.modalContent}>
-            <ThemedView style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Select Organization</ThemedText>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, isTablet && styles.modalContentTablet]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Organization</Text>
               <TouchableOpacity
-                style={styles.closeButton}
                 onPress={() => setShowOrgModal(false)}
+                style={styles.modalCloseButton}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
               >
-                <ThemedText style={styles.closeButtonText}>✕</ThemedText>
+                <IconSymbol name="xmark" size={20} color="#6B7280" />
               </TouchableOpacity>
-            </ThemedView>
+            </View>
 
             <FlatList
               data={organizations}
@@ -320,11 +516,28 @@ export default function RegisterScreen() {
               keyExtractor={(item) => item.org_id}
               contentContainerStyle={styles.orgList}
               showsVerticalScrollIndicator={false}
+              ListEmptyComponent={
+                <View style={styles.emptyOrgs}>
+                  <IconSymbol name="building.2" size={48} color="#D1D5DB" />
+                  <Text style={styles.emptyOrgsText}>No organizations available</Text>
+                </View>
+              }
             />
-          </ThemedView>
-        </ThemedView>
+          </View>
+        </View>
       </Modal>
-    </ThemedView>
+    </View>
+  );
+}
+
+function FeatureItem({ icon, text }: { icon: string; text: string }) {
+  return (
+    <View style={styles.featureItem}>
+      <View style={styles.featureIconContainer}>
+        <IconSymbol name={icon as any} size={20} color={Colors.primary} />
+      </View>
+      <Text style={styles.featureText}>{text}</Text>
+    </View>
   );
 }
 
@@ -332,165 +545,259 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  gradient: {
+  safeArea: {
+    flex: 1,
+  },
+  keyboardView: {
     flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
-    paddingVertical: 60,
-    paddingHorizontal: 24,
+    justifyContent: 'center',
+    padding: Spacing.lg,
   },
-  header: {
+  scrollContentLandscape: {
+    justifyContent: 'center',
+  },
+  contentContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 40,
   },
-  logoContainer: {
-    marginBottom: 20,
-    backgroundColor: 'transparent',
+  contentContainerLandscape: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: Spacing.xxl,
   },
-  logoBox: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
+
+  // Branding section
+  brandingSection: {
+    flex: 1,
+    maxWidth: 400,
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
+  },
+  largeLogo: {
+    width: 120,
+    height: 120,
+    borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#E97A42',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+    marginBottom: Spacing.lg,
+    ...Shadows.large,
+  },
+  largeLogoText: {
+    fontSize: 72,
+    fontWeight: '900',
+    color: '#FFFFFF',
+  },
+  brandTitle: {
+    fontSize: Typography.title1,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: Spacing.sm,
+  },
+  brandTagline: {
+    fontSize: Typography.body,
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'center',
+    marginBottom: Spacing.xl,
+  },
+  featureList: {
+    width: '100%',
+    gap: Spacing.md,
+  },
+  featureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  featureIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  featureText: {
+    fontSize: Typography.callout,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '500',
+  },
+
+  // Form section
+  formSection: {
+    width: '100%',
+    maxWidth: 440,
+    alignItems: 'center',
+  },
+  formSectionLandscape: {
+    flex: 1,
+    maxWidth: 480,
+  },
+  formCard: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: BorderRadius.xxl,
+    padding: Spacing.xl,
+    ...Shadows.large,
+  },
+  formCardTablet: {
+    padding: Spacing.xxl,
+  },
+
+  // Header
+  headerSection: {
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  logo: {
+    width: 72,
+    height: 72,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
+    ...Shadows.medium,
   },
   logoText: {
-    fontSize: 48,
+    fontSize: 40,
     fontWeight: '900',
     color: '#FFFFFF',
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 8,
+    fontSize: Typography.title2,
+    fontWeight: '700',
+    color: Colors.text,
+    marginBottom: Spacing.xs,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#666666',
-    fontWeight: '600',
+    fontSize: Typography.callout,
+    color: Colors.textSecondary,
   },
-  formContainer: {
-    width: '100%',
+
+  // Input styles
+  inputGroup: {
+    marginBottom: Spacing.md,
   },
-  glassCard: {
-    borderRadius: 24,
-    padding: 24,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderWidth: 1,
-    borderColor: 'rgba(233, 122, 66, 0.3)',
-    overflow: 'hidden',
-    shadowColor: '#E97A42',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  inputContainer: {
-    marginBottom: 20,
-    backgroundColor: 'transparent',
-  },
-  labelContainer: {
+  labelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
-    backgroundColor: 'transparent',
+    marginBottom: Spacing.sm,
+    gap: Spacing.xs,
   },
   label: {
-    fontSize: 14,
+    fontSize: Typography.subhead,
     fontWeight: '600',
-    color: '#1a1a1a',
+    color: Colors.text,
+    marginBottom: Spacing.sm,
   },
   optionalLabel: {
-    fontSize: 12,
-    color: '#999999',
-    marginLeft: 6,
+    fontSize: Typography.footnote,
+    color: Colors.textLight,
     fontStyle: 'italic',
+    marginBottom: Spacing.sm,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    paddingHorizontal: Spacing.md,
+    height: 52,
+    gap: Spacing.sm,
+  },
+  inputWrapperFocused: {
+    borderColor: Colors.primary,
+    backgroundColor: '#FFFFFF',
+    ...Shadows.small,
   },
   input: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: '#1a1a1a',
-    borderWidth: 1,
-    borderColor: '#E97A42',
-    justifyContent: 'center',
+    flex: 1,
+    fontSize: Typography.callout,
+    color: Colors.text,
+    height: '100%',
   },
-  placeholderText: {
-    color: '#999999',
-    fontSize: 16,
-  },
-  selectedOrgText: {
-    color: '#1a1a1a',
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  clearButton: {
-    marginTop: 8,
+
+  // Organization
+  orgLoader: {
+    flex: 1,
     alignItems: 'flex-start',
   },
-  clearButtonText: {
-    color: '#E97A42',
-    fontSize: 14,
+  orgText: {
+    flex: 1,
+    fontSize: Typography.callout,
+    color: Colors.text,
+  },
+  orgPlaceholder: {
+    color: '#9CA3AF',
+  },
+  clearOrgButton: {
+    marginTop: Spacing.sm,
+    alignSelf: 'flex-start',
+    padding: Spacing.xs,
+  },
+  clearOrgText: {
+    fontSize: Typography.subhead,
+    color: Colors.primary,
     fontWeight: '600',
   },
-  button: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginTop: 8,
-    shadowColor: '#E97A42',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonGradient: {
-    paddingVertical: 16,
+
+  // Create button
+  createButton: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    height: 52,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+    ...Shadows.medium,
   },
-  buttonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
+  createButtonDisabled: {
+    opacity: 0.7,
   },
-  termsContainer: {
-    marginTop: 16,
-    marginBottom: 8,
-    backgroundColor: 'transparent',
+  createButtonText: {
+    fontSize: Typography.body,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
+
+  // Terms
   termsText: {
-    color: '#666666',
-    fontSize: 12,
+    fontSize: Typography.footnote,
+    color: Colors.textSecondary,
     textAlign: 'center',
+    marginTop: Spacing.md,
     lineHeight: 18,
   },
   termsLink: {
-    color: '#E97A42',
+    color: Colors.primary,
     fontWeight: '600',
   },
-  signupLink: {
+
+  // Sign in link
+  signInContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: Spacing.lg,
   },
-  signupText: {
-    color: '#666666',
-    fontSize: 14,
+  signInText: {
+    fontSize: Typography.subhead,
+    color: Colors.textSecondary,
   },
-  signupBold: {
-    fontWeight: 'bold',
-    color: '#E97A42',
+  signInLink: {
+    fontSize: Typography.subhead,
+    fontWeight: '700',
+    color: Colors.primary,
   },
-  // Modal Styles
+
+  // Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -498,56 +805,55 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: BorderRadius.xxl,
+    borderTopRightRadius: BorderRadius.xxl,
     maxHeight: '70%',
-    paddingBottom: 20,
+    paddingBottom: Spacing.lg,
+  },
+  modalContentTablet: {
+    maxHeight: '50%',
+    marginHorizontal: Spacing.xxl,
+    marginBottom: Spacing.xxl,
+    borderRadius: BorderRadius.xxl,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: Spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-    backgroundColor: 'transparent',
+    borderBottomColor: Colors.border,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
+    fontSize: Typography.headline,
+    fontWeight: '700',
+    color: Colors.text,
   },
-  closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F0F0F0',
+  modalCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  closeButtonText: {
-    fontSize: 20,
-    color: '#666666',
-    fontWeight: 'bold',
-  },
   orgList: {
-    padding: 20,
+    padding: Spacing.lg,
+    gap: Spacing.sm,
   },
   orgItem: {
-    marginBottom: 12,
-  },
-  orgItemContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#F9F9F9',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
+    padding: Spacing.md,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    gap: Spacing.md,
   },
-  orgItemIcon: {
-    marginRight: 12,
-    backgroundColor: 'transparent',
+  orgItemSelected: {
+    borderColor: Colors.primary,
+    backgroundColor: 'rgba(233, 122, 66, 0.05)',
   },
   orgIconGradient: {
     width: 48,
@@ -558,21 +864,29 @@ const styles = StyleSheet.create({
   },
   orgIconText: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#FFFFFF',
   },
   orgItemInfo: {
     flex: 1,
-    backgroundColor: 'transparent',
   },
   orgItemName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 4,
+    fontSize: Typography.callout,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 2,
   },
   orgItemDate: {
-    fontSize: 12,
-    color: '#666666',
+    fontSize: Typography.footnote,
+    color: Colors.textSecondary,
+  },
+  emptyOrgs: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xxl,
+    gap: Spacing.md,
+  },
+  emptyOrgsText: {
+    fontSize: Typography.callout,
+    color: Colors.textSecondary,
   },
 });
