@@ -32,6 +32,9 @@ import teamService from '@/services/api/teamService';
 import playerService from '@/services/api/playerService';
 import userService from '@/services/api/userService';
 import * as Sentry from '@sentry/react-native';
+import type { Team as UITeam, Player as UIPlayer } from '@/data/mockData';
+import type { Team as APITeam } from '@/services/api/teamService';
+import type { Player as APIPlayer } from '@/services/api/playerService';
 
 interface Coach {
   id: string;
@@ -44,6 +47,8 @@ interface TeamFormData {
   name: string;
   sport: string;
   season: string;
+  video_id: string;
+  model_team_identifier: string;
 }
 
 interface PlayerFormData {
@@ -52,13 +57,68 @@ interface PlayerFormData {
   position: string;
   height: string;
   weight: string;
+  video_id: string;
+  model_player_identifier: string;
 }
+
+// Helper function to generate UUID
+const generateUUID = (): string => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
+// Mapper functions to transform API data to UI format
+const mapAPITeamToUITeam = (apiTeam: APITeam): UITeam => ({
+  id: apiTeam.team_id,
+  name: apiTeam.name || 'Unnamed Team',
+  level: 'Basketball Team',
+  record: { wins: 0, losses: 0 }, // Will be populated from game stats
+  players: [],
+  stats: {
+    averagePoints: 0,
+    pointsAllowed: 0,
+    fieldGoalPercentage: 0,
+    threePointPercentage: 0,
+    turnovers: 0,
+  },
+});
+
+const mapAPIPlayerToUIPlayer = (apiPlayer: APIPlayer): UIPlayer => ({
+  id: apiPlayer.player_id,
+  name: apiPlayer.name || `Player #${apiPlayer.player_number || '?'}`,
+  jerseyNumber: apiPlayer.player_number || 0,
+  position: 'PG', // Default position, can be enhanced later
+  stats: apiPlayer.stats ? {
+    points: (apiPlayer.stats.two_point_made * 2) + (apiPlayer.stats.three_point_made * 3) + apiPlayer.stats.free_throw_made,
+    rebounds: apiPlayer.stats.offensive_rebounds + apiPlayer.stats.defensive_rebounds,
+    assists: apiPlayer.stats.assists,
+    fieldGoalPercentage: apiPlayer.stats.two_point_att > 0
+      ? ((apiPlayer.stats.two_point_made + apiPlayer.stats.three_point_made) / (apiPlayer.stats.two_point_att + apiPlayer.stats.three_point_att)) * 100
+      : 0,
+    freeThrowPercentage: apiPlayer.stats.free_throw_att > 0
+      ? (apiPlayer.stats.free_throw_made / apiPlayer.stats.free_throw_att) * 100
+      : 0,
+    turnovers: apiPlayer.stats.turnovers,
+    minutesPlayed: 0, // Not available in API stats yet
+  } : {
+    points: 0,
+    rebounds: 0,
+    assists: 0,
+    fieldGoalPercentage: 0,
+    freeThrowPercentage: 0,
+    turnovers: 0,
+    minutesPlayed: 0,
+  },
+});
 
 export default function TeamsScreen() {
   const { currentColors } = useTheme();
   const { width, height } = useWindowDimensions();
-  const { teams, selectedTeam, setSelectedTeam, loadTeams, setTeams } = useTeamStore();
-  const { players, loadPlayers, setPlayers } = usePlayerStore();
+  const { teams, selectedTeam, setSelectedTeam, setTeams } = useTeamStore();
+  const { players, setPlayers } = usePlayerStore();
 
   // Responsive breakpoints
   const isTablet = width >= 768;
@@ -76,6 +136,8 @@ export default function TeamsScreen() {
     name: '',
     sport: 'Basketball',
     season: '2024-25',
+    video_id: '',
+    model_team_identifier: '1',
   });
 
   const [playerForm, setPlayerForm] = useState<PlayerFormData>({
@@ -84,6 +146,8 @@ export default function TeamsScreen() {
     position: 'PG',
     height: '',
     weight: '',
+    video_id: '',
+    model_player_identifier: '1',
   });
 
   const positions = ['PG', 'SG', 'SF', 'PF', 'C'];
@@ -98,6 +162,69 @@ export default function TeamsScreen() {
       loadPlayers(selectedTeam.id);
     }
   }, [selectedTeam]);
+
+  // Load teams from API with proper error handling
+  const loadTeams = async () => {
+    try {
+      const response = await teamService.getTeams();
+
+      if (response.teams && response.teams.length > 0) {
+        // Transform API teams to UI format
+        const uiTeams = response.teams.map(mapAPITeamToUITeam);
+        setTeams(uiTeams);
+
+        // Set first team as selected if none selected
+        if (!selectedTeam && uiTeams.length > 0) {
+          setSelectedTeam(uiTeams[0]);
+        }
+
+        console.log('✅ Teams loaded from API:', uiTeams.length);
+      } else {
+        // API returned empty array - no teams exist yet
+        setTeams([]);
+        setSelectedTeam(null);
+        console.log('📭 No teams found');
+      }
+    } catch (err: any) {
+      console.error('❌ Failed to load teams:', err);
+      Sentry.captureException(err);
+
+      // Show error to user - DO NOT use mock data
+      Alert.alert(
+        'Unable to Load Teams',
+        'Could not connect to the server. Please check your connection and try again.',
+        [{ text: 'OK' }]
+      );
+
+      // Set empty state
+      setTeams([]);
+      setSelectedTeam(null);
+    }
+  };
+
+  // Load players for selected team from API with proper error handling
+  const loadPlayers = async (teamId: string) => {
+    try {
+      const response = await playerService.getPlayers({ team_id: teamId });
+
+      if (response.players && response.players.length > 0) {
+        // Transform API players to UI format
+        const uiPlayers = response.players.map(mapAPIPlayerToUIPlayer);
+        setPlayers(uiPlayers);
+        console.log('✅ Players loaded from API:', uiPlayers.length);
+      } else {
+        // No players found for this team
+        setPlayers([]);
+        console.log('📭 No players found for team:', teamId);
+      }
+    } catch (err: any) {
+      console.error('❌ Failed to load players:', err);
+      Sentry.captureException(err);
+
+      // Set empty state - DO NOT use mock data
+      setPlayers([]);
+    }
+  };
 
   const loadInitialData = async () => {
     try {
@@ -139,6 +266,8 @@ export default function TeamsScreen() {
       name: '',
       sport: 'Basketball',
       season: '2024-25',
+      video_id: '',
+      model_team_identifier: '1',
     });
     setShowTeamModal(true);
   };
@@ -149,6 +278,8 @@ export default function TeamsScreen() {
       name: team.name,
       sport: team.sport || 'Basketball',
       season: team.season || '2024-25',
+      video_id: team.video_id || '',
+      model_team_identifier: team.model_team_identifier || '1',
     });
     setShowTeamModal(true);
   };
@@ -159,27 +290,38 @@ export default function TeamsScreen() {
       return;
     }
 
+    if (!teamForm.video_id.trim()) {
+      Alert.alert('Error', 'Please enter a video ID');
+      return;
+    }
+
     try {
       if (editingTeam) {
-        const updated = await teamService.updateTeam(editingTeam.id, teamForm);
-        const updatedTeams = teams.map(t => t.id === editingTeam.id ? updated : t);
-        setTeams(updatedTeams);
-        if (selectedTeam?.id === editingTeam.id) {
-          setSelectedTeam(updated);
-        }
+        // Update team - API only allows updating name
+        await teamService.updateTeam(editingTeam.id, { name: teamForm.name });
+        await loadTeams(); // Reload to get updated data
         Alert.alert('Success', 'Team updated successfully');
       } else {
-        const newTeam = await teamService.createTeam(teamForm);
-        setTeams([...teams, newTeam]);
-        if (!selectedTeam) {
-          setSelectedTeam(newTeam);
-        }
+        // Create new team with all required fields
+        const teamData = {
+          team_id: generateUUID(),
+          video_id: teamForm.video_id,
+          model_team_identifier: teamForm.model_team_identifier,
+          name: teamForm.name,
+        };
+
+        await teamService.createTeam(teamData);
+        await loadTeams(); // Reload to get new team
         Alert.alert('Success', 'Team created successfully');
       }
       setShowTeamModal(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to save team:', err);
-      Alert.alert('Error', 'Failed to save team. Please try again.');
+      Sentry.captureException(err);
+      Alert.alert(
+        'Error',
+        err.response?.data?.error || 'Failed to save team. Please try again.'
+      );
     }
   };
 
@@ -224,6 +366,8 @@ export default function TeamsScreen() {
       position: 'PG',
       height: '',
       weight: '',
+      video_id: '',
+      model_player_identifier: '1',
     });
     setShowPlayerModal(true);
   };
@@ -232,10 +376,12 @@ export default function TeamsScreen() {
     setEditingPlayer(player);
     setPlayerForm({
       name: player.name,
-      jersey_number: player.jersey_number?.toString() || '',
+      jersey_number: player.jerseyNumber?.toString() || player.jersey_number?.toString() || '',
       position: player.position || 'PG',
       height: player.height || '',
       weight: player.weight?.toString() || '',
+      video_id: player.video_id || '',
+      model_player_identifier: player.model_player_identifier || '1',
     });
     setShowPlayerModal(true);
   };
@@ -248,30 +394,45 @@ export default function TeamsScreen() {
       return;
     }
 
-    try {
-      const playerData = {
-        name: playerForm.name,
-        jersey_number: parseInt(playerForm.jersey_number),
-        position: playerForm.position,
-        height: playerForm.height || undefined,
-        weight: playerForm.weight ? parseFloat(playerForm.weight) : undefined,
-        team_id: selectedTeam.id,
-      };
+    if (!playerForm.video_id.trim()) {
+      Alert.alert('Error', 'Please enter a video ID');
+      return;
+    }
 
+    try {
       if (editingPlayer) {
-        const updated = await playerService.updatePlayer(editingPlayer.id, playerData);
-        const updatedPlayers = players.map(p => p.id === editingPlayer.id ? updated : p);
-        setPlayers(updatedPlayers);
+        // Update player - API allows updating name and player_number
+        const updateData = {
+          name: playerForm.name,
+          player_number: parseInt(playerForm.jersey_number),
+        };
+
+        await playerService.updatePlayer(editingPlayer.id, updateData);
+        await loadPlayers(selectedTeam.id); // Reload players
         Alert.alert('Success', 'Player updated successfully');
       } else {
-        const newPlayer = await playerService.createPlayer(playerData);
-        setPlayers([...players, newPlayer]);
+        // Create new player with all required fields
+        const playerData = {
+          player_id: generateUUID(),
+          team_id: selectedTeam.id,
+          video_id: playerForm.video_id,
+          model_player_identifier: playerForm.model_player_identifier,
+          name: playerForm.name,
+          player_number: parseInt(playerForm.jersey_number),
+        };
+
+        await playerService.createPlayer(playerData);
+        await loadPlayers(selectedTeam.id); // Reload players
         Alert.alert('Success', 'Player added successfully');
       }
       setShowPlayerModal(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to save player:', err);
-      Alert.alert('Error', 'Failed to save player. Please try again.');
+      Sentry.captureException(err);
+      Alert.alert(
+        'Error',
+        err.response?.data?.error || 'Failed to save player. Please try again.'
+      );
     }
   };
 
@@ -797,6 +958,36 @@ export default function TeamsScreen() {
               />
             </View>
 
+            <View style={styles.formGroup}>
+              <Text style={[styles.formLabel, { color: currentColors.text }]}>Video ID</Text>
+              <TextInput
+                style={[styles.input, {
+                  backgroundColor: currentColors.surface,
+                  color: currentColors.text,
+                  borderColor: currentColors.border
+                }]}
+                value={teamForm.video_id}
+                onChangeText={(text) => setTeamForm({ ...teamForm, video_id: text })}
+                placeholder="Enter video ID (UUID)"
+                placeholderTextColor={currentColors.textLight}
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={[styles.formLabel, { color: currentColors.text }]}>Team Identifier</Text>
+              <TextInput
+                style={[styles.input, {
+                  backgroundColor: currentColors.surface,
+                  color: currentColors.text,
+                  borderColor: currentColors.border
+                }]}
+                value={teamForm.model_team_identifier}
+                onChangeText={(text) => setTeamForm({ ...teamForm, model_team_identifier: text })}
+                placeholder="e.g., 1 or 2"
+                placeholderTextColor={currentColors.textLight}
+              />
+            </View>
+
             {editingTeam && (
               <TouchableOpacity
                 onPress={() => {
@@ -930,6 +1121,36 @@ export default function TeamsScreen() {
                   placeholderTextColor={currentColors.textLight}
                 />
               </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={[styles.formLabel, { color: currentColors.text }]}>Video ID</Text>
+              <TextInput
+                style={[styles.input, {
+                  backgroundColor: currentColors.surface,
+                  color: currentColors.text,
+                  borderColor: currentColors.border
+                }]}
+                value={playerForm.video_id}
+                onChangeText={(text) => setPlayerForm({ ...playerForm, video_id: text })}
+                placeholder="Enter video ID (UUID)"
+                placeholderTextColor={currentColors.textLight}
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={[styles.formLabel, { color: currentColors.text }]}>Player Identifier</Text>
+              <TextInput
+                style={[styles.input, {
+                  backgroundColor: currentColors.surface,
+                  color: currentColors.text,
+                  borderColor: currentColors.border
+                }]}
+                value={playerForm.model_player_identifier}
+                onChangeText={(text) => setPlayerForm({ ...playerForm, model_player_identifier: text })}
+                placeholder="e.g., 1, 2, 3, etc."
+                placeholderTextColor={currentColors.textLight}
+              />
             </View>
 
             {editingPlayer && (

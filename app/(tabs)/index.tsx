@@ -10,21 +10,13 @@ import {
   TouchableOpacity,
   useWindowDimensions,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { router } from 'expo-router';
-import {
-  mockCoach,
-  mockGames,
-  mockTeams,
-  mockAIInsights,
-  mockTopPerformers,
-  mockUpcomingGame,
-} from '@/data/mockData';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useAuth } from '@/contexts/AuthContext';
 import { Colors, Spacing, Typography, BorderRadius, Shadows } from '@/constants/theme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import PlayerAvatar from '@/components/ui/PlayerAvatar';
@@ -46,15 +38,11 @@ interface Coach {
 
 function DashboardScreenContent() {
   const { currentColors } = useTheme();
-  const { isAuthenticated } = useAuth();
-  const isDemoMode = !isAuthenticated;
   const { width, height } = useWindowDimensions();
 
   // Responsive breakpoints
   const isTablet = width >= 768;
   const isLandscape = width > height;
-  const isLargeScreen = isTablet && isLandscape;
-  const isMediumScreen = isTablet && !isLandscape;
 
   // Local state
   const [coach, setCoach] = useState<Coach | null>(null);
@@ -63,7 +51,6 @@ function DashboardScreenContent() {
   const [recentGames, setRecentGames] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [usingMockData, setUsingMockData] = useState(false);
 
   // New state for redesigned components
   const [aiInsights, setAIInsights] = useState<AIInsight[]>([]);
@@ -88,64 +75,39 @@ function DashboardScreenContent() {
     try {
       setLoading(true);
 
-      if (isDemoMode) {
-        // Load all mock data for demo mode
-        setCoach({ ...mockCoach, email: 'demo@athloscore.com' });
-        setSelectedTeam(mockTeams[0]);
-        setPlayers(mockTeams[0].players);
-        setRecentGames(mockGames);
-        setAIInsights(mockAIInsights);
-        setTopPerformers(mockTopPerformers);
-        setUpcomingGame(mockUpcomingGame);
-        setTeamStats({
-          avgPoints: 87.3,
-          totalGames: 24,
-          totalFilms: 24,
-          winRate: 75,
-          fieldGoalPercentage: 47,
-          rebounds: 33,
-          turnovers: 14,
-        });
-        setUsingMockData(true);
-        setLoading(false);
-        return;
-      }
-
       await loadCoachProfile();
       const teamId = await AsyncStorage.getItem('selected_team_id');
       if (teamId) {
         await loadTeamData(teamId);
       } else {
-        // Fall back to mock data if no team selected
-        setSelectedTeam(mockTeams[0]);
-        setPlayers(mockTeams[0].players.slice(0, 3));
-        setAIInsights(mockAIInsights);
-        setTopPerformers(mockTopPerformers);
-        setUpcomingGame(mockUpcomingGame);
-        setUsingMockData(true);
+        // No team selected - set empty states and let UI show onboarding
+        setSelectedTeam(null);
+        setPlayers([]);
+        setRecentGames([]);
+        setAIInsights([]);
+        setTopPerformers([]);
+        setUpcomingGame(null);
       }
     } catch (err) {
-      // Fall back to mock data on error
-      setCoach({ ...mockCoach, email: 'demo@athloscore.com' });
-      setSelectedTeam(mockTeams[0]);
-      setPlayers(mockTeams[0].players);
-      setRecentGames(mockGames);
-      setAIInsights(mockAIInsights);
-      setTopPerformers(mockTopPerformers);
-      setUpcomingGame(mockUpcomingGame);
-      setTeamStats({
-        avgPoints: 87.3,
-        totalGames: 24,
-        totalFilms: 24,
-        winRate: 75,
-        fieldGoalPercentage: 47,
-        rebounds: 33,
-        turnovers: 14,
-      });
-      setUsingMockData(true);
+      console.error('❌ Dashboard load failed:', err);
+      Sentry.captureException(err);
+      Alert.alert('Unable to Load Dashboard', 'Could not connect to the server. Please check your connection and try again.');
 
-      Sentry.captureException(err, {
-        tags: { screen: 'dashboard', action: 'load_data' },
+      // Set empty states
+      setSelectedTeam(null);
+      setPlayers([]);
+      setRecentGames([]);
+      setAIInsights([]);
+      setTopPerformers([]);
+      setUpcomingGame(null);
+      setTeamStats({
+        avgPoints: 0,
+        totalGames: 0,
+        totalFilms: 0,
+        winRate: 0,
+        fieldGoalPercentage: 0,
+        rebounds: 0,
+        turnovers: 0,
       });
     } finally {
       setLoading(false);
@@ -168,7 +130,8 @@ function DashboardScreenContent() {
         imageUri: profile.avatar_url,
       });
     } catch (err) {
-      setCoach({ ...mockCoach, email: 'demo@athloscore.com' });
+      console.error('Failed to load coach profile:', err);
+      setCoach({ id: '', name: 'Coach', email: '', imageUri: undefined });
     }
   };
 
@@ -178,20 +141,26 @@ function DashboardScreenContent() {
       setSelectedTeam(team);
 
       const teamPlayersResponse = await playerService.getPlayers({ team_id: teamId });
-      setPlayers(teamPlayersResponse.players || []);
+      const players = teamPlayersResponse.players || [];
+      setPlayers(players);
+
+      if (players.length === 0) {
+        console.log('📭 No players found for team');
+      }
 
       const games = await gameService.getRecentGames(teamId, 5);
       setRecentGames(games);
 
+      if (games.length === 0) {
+        console.log('📭 No recent games found for team');
+      }
+
       await loadTeamStats(teamId);
 
-      // For now, use mock data for AI insights and top performers
-      // These would come from dedicated endpoints in production
-      setAIInsights(mockAIInsights);
-      setTopPerformers(mockTopPerformers);
-      setUpcomingGame(mockUpcomingGame);
-
-      setUsingMockData(false);
+      // TODO: Add dedicated endpoints for AI insights and top performers
+      setAIInsights([]);
+      setTopPerformers([]);
+      setUpcomingGame(null);
     } catch (err) {
       throw err;
     }
@@ -210,15 +179,17 @@ function DashboardScreenContent() {
         turnovers: stats.average_turnovers || 0,
       });
     } catch (err) {
-      setTeamStats(prev => ({
-        ...prev,
-        avgPoints: 87.3,
-        totalGames: 24,
-        winRate: 75,
-        fieldGoalPercentage: 47,
-        rebounds: 33,
-        turnovers: 14,
-      }));
+      console.error('Failed to load team stats:', err);
+      // Set zeros if stats fail to load
+      setTeamStats({
+        avgPoints: 0,
+        totalGames: 0,
+        totalFilms: 0,
+        winRate: 0,
+        fieldGoalPercentage: 0,
+        rebounds: 0,
+        turnovers: 0,
+      });
     }
   };
 
@@ -292,19 +263,6 @@ function DashboardScreenContent() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {/* Demo Mode Banner */}
-        {usingMockData && (
-          <Animated.View
-            entering={FadeInDown.duration(300)}
-            style={[styles.demoBanner, { backgroundColor: Colors.warning + '15' }]}
-          >
-            <IconSymbol name="info.circle.fill" size={16} color={Colors.warning} />
-            <Text style={[styles.demoBannerText, { color: Colors.warning }]}>
-              {isDemoMode ? 'Demo Mode' : 'Sample Data'}
-            </Text>
-          </Animated.View>
-        )}
-
         {/* Main Content */}
         <View style={styles.mainContent}>
           {/* HERO: Team Card with Navy Gradient */}

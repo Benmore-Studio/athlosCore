@@ -16,7 +16,6 @@ import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
 import videoService from '@/services/api/videoService';
 import { useVideoStore } from '@/stores';
-import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { BorderRadius, Spacing, Typography, Shadows, Colors } from '@/constants/theme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -24,57 +23,21 @@ import * as Sentry from '@sentry/react-native';
 import { ComponentErrorBoundary } from '@/components/component-error-boundary';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// ✅ Mock videos for demo/fallback
-const MOCK_VIDEOS = [
-  {
-    id: 'mock-1',
-    title: 'Warriors vs Lakers - Full Game Highlights',
-    thumbnail: 'https://picsum.photos/400/300?random=1',
-    duration: '12:45',
-    views: '1.2K',
-    date: '2 days ago',
-    videoUrl: 'https://example.com/video1.mp4',
-    uploadedAt: new Date().toISOString(),
-  },
-  {
-    id: 'mock-2',
-    title: 'Amazing Buzzer Beater - Game Winner',
-    thumbnail: 'https://picsum.photos/400/300?random=2',
-    duration: '8:30',
-    views: '856',
-    date: '5 days ago',
-    videoUrl: 'https://example.com/video2.mp4',
-    uploadedAt: new Date().toISOString(),
-  },
-  {
-    id: 'mock-3',
-    title: 'Top 10 Plays of the Week',
-    thumbnail: 'https://picsum.photos/400/300?random=3',
-    duration: '15:20',
-    views: '2.5K',
-    date: '1 week ago',
-    videoUrl: 'https://example.com/video3.mp4',
-    uploadedAt: new Date().toISOString(),
-  },
-];
-
 function VideosScreenContent() {
   const router = useRouter();
   const { currentColors, isDark } = useTheme();
-  const { isDemoMode } = useAuth();
   
   // ✅ Use Zustand store instead of local state
-  const { 
-    videos, 
-    setVideos, 
+  const {
+    videos,
+    setVideos,
     isLoading,
     error,
     setLoading,
-    setError 
+    setError
   } = useVideoStore();
 
   const [refreshing, setRefreshing] = React.useState(false);
-  const [usingMockData, setUsingMockData] = React.useState(false);
 
   const loadVideos = async (isRefresh = false) => {
     try {
@@ -85,14 +48,6 @@ function VideosScreenContent() {
       }
 
       setError(null);
-
-      // ✅ Use mock data in demo mode
-      if (isDemoMode) {
-        console.log('📦 Using mock videos (Demo Mode)');
-        setVideos(MOCK_VIDEOS);
-        setUsingMockData(true);
-        return;
-      }
 
       // ✅ Get org_id from AsyncStorage
       const orgId = await AsyncStorage.getItem('current_org_id');
@@ -108,6 +63,10 @@ function VideosScreenContent() {
 
       console.log('✅ Videos fetched:', data.length);
 
+      if (data.length === 0) {
+        console.log('📭 No videos found - showing empty state');
+      }
+
       // ✅ Transform API data to match component format
       const transformedVideos = data.map((video: any) => ({
         id: video.video_id,
@@ -122,27 +81,23 @@ function VideosScreenContent() {
 
       // ✅ Store videos in Zustand
       setVideos(transformedVideos);
-      setUsingMockData(false);
 
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to load videos';
-
-      // ✅ Fallback to mock data on error
-      console.error('❌ API fetch failed, using mock data:', err);
-      console.log('📦 Using mock videos (API Fallback)');
-      setVideos(MOCK_VIDEOS);
-      setUsingMockData(true);
-      setError('Unable to connect to server. Using sample data.');
-
+      console.error('❌ Failed to load videos:', err);
       Sentry.captureException(err, {
         tags: { screen: 'videos', action: 'load_videos' },
-        extra: {
-          isRefresh,
-          errorMessage: errorMsg
-        }
+        extra: { isRefresh }
       });
 
-      console.error('Error loading videos:', err);
+      // Show error to user - DO NOT use mock data
+      Alert.alert(
+        'Unable to Load Videos',
+        'Could not connect to the server. Please check your connection and try again.',
+        [{ text: 'OK' }]
+      );
+
+      // Set empty state
+      setVideos([]);
 
     } finally {
       setLoading(false);
@@ -324,7 +279,7 @@ function VideosScreenContent() {
   }
 
   // Error state
-  if (error && videos.length === 0 && !usingMockData) {
+  if (error && videos.length === 0) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: currentColors.background }]}>
         <View style={styles.errorContainer}>
@@ -381,19 +336,6 @@ function VideosScreenContent() {
           </TouchableOpacity>
         </View>
       </Animated.View>
-
-      {/* Mock Data Banner */}
-      {usingMockData && (
-        <Animated.View
-          entering={FadeInUp.delay(100).duration(300)}
-          style={[styles.mockDataBanner, { backgroundColor: Colors.warning + '15' }]}
-        >
-          <IconSymbol name="info.circle.fill" size={16} color={Colors.warning} />
-          <Text style={[styles.mockDataText, { color: Colors.warning }]}>
-            {isDemoMode ? 'Demo Mode' : 'Sample Data'}
-          </Text>
-        </Animated.View>
-      )}
 
       {/* Videos List */}
       <FlatList

@@ -16,12 +16,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, BorderRadius, Spacing, Typography, Shadows } from '@/constants/theme';
+import authService from '@/services/api/authService';
+import * as Sentry from '@sentry/react-native';
 
 interface Organization {
-  id: string;
+  org_id: string;
   name: string;
-  members: number;
-  icon: string; // SF Symbol name
+  created_at: string;
+  last_updated_at: string;
 }
 
 export default function OrgSelectionScreen() {
@@ -39,21 +41,37 @@ export default function OrgSelectionScreen() {
   }, []);
 
   const loadOrganizations = async () => {
-    // Mock data with SF Symbol icons
-    setOrganizations([
-      { id: '1', name: 'Lincoln Eagles', members: 150, icon: 'basketball.fill' },
-      { id: '2', name: 'Warriors Basketball', members: 87, icon: 'figure.basketball' },
-      { id: '3', name: 'Hoops Academy', members: 45, icon: 'graduationcap.fill' },
-      { id: '4', name: 'Elite Training', members: 203, icon: 'trophy.fill' },
-    ]);
-
     try {
+      setLoading(true);
+      console.log('Loading organizations from API...');
+
+      const orgs = await authService.getOrgsList();
+      setOrganizations(orgs);
+
+      console.log('Organizations loaded:', orgs.length);
+
+      // Load previously selected org
       const savedOrgId = await AsyncStorage.getItem('current_org_id');
       if (savedOrgId) {
         setSelectedOrg(savedOrgId);
       }
     } catch (error) {
-      console.error('Failed to load saved org:', error);
+      console.error('Failed to load organizations:', error);
+      Sentry.captureException(error, {
+        tags: { screen: 'org_selection', action: 'load_organizations' }
+      });
+
+      Alert.alert(
+        'Unable to Load Organizations',
+        'Could not connect to the server. Please check your connection and try again.',
+        [
+          { text: 'Retry', onPress: loadOrganizations },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
+      setOrganizations([]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -66,7 +84,7 @@ export default function OrgSelectionScreen() {
     setLoading(true);
     try {
       await AsyncStorage.setItem('current_org_id', selectedOrg);
-      const selectedOrgData = organizations.find(org => org.id === selectedOrg);
+      const selectedOrgData = organizations.find(org => org.org_id === selectedOrg);
 
       AccessibilityInfo.announceForAccessibility(
         `Organization ${selectedOrgData?.name} selected`
@@ -74,6 +92,7 @@ export default function OrgSelectionScreen() {
 
       router.replace('/(tabs)');
     } catch (error) {
+      console.error('Failed to save organization:', error);
       Alert.alert('Error', 'Failed to save organization. Please try again.');
     } finally {
       setLoading(false);
@@ -163,30 +182,30 @@ export default function OrgSelectionScreen() {
                 <View style={styles.orgList}>
                   {organizations.map((org, index) => (
                     <Animated.View
-                      key={org.id}
+                      key={org.org_id}
                       entering={FadeInDown.delay(300 + index * 100).duration(500)}
                     >
                       <TouchableOpacity
-                        onPress={() => setSelectedOrg(org.id)}
+                        onPress={() => setSelectedOrg(org.org_id)}
                         activeOpacity={0.7}
                         disabled={loading}
                         accessibilityRole="button"
-                        accessibilityLabel={`${org.name}, ${org.members} members`}
-                        accessibilityState={{ selected: selectedOrg === org.id }}
+                        accessibilityLabel={org.name}
+                        accessibilityState={{ selected: selectedOrg === org.org_id }}
                       >
                         <View style={[
                           styles.orgCard,
-                          selectedOrg === org.id && styles.orgCardSelected,
+                          selectedOrg === org.org_id && styles.orgCardSelected,
                         ]}>
                           {/* Icon */}
                           <View style={[
                             styles.orgIconContainer,
-                            selectedOrg === org.id && styles.orgIconContainerSelected,
+                            selectedOrg === org.org_id && styles.orgIconContainerSelected,
                           ]}>
                             <IconSymbol
-                              name={org.icon as any}
+                              name="building.2.fill"
                               size={28}
-                              color={selectedOrg === org.id ? '#FFFFFF' : Colors.primary}
+                              color={selectedOrg === org.org_id ? '#FFFFFF' : Colors.primary}
                             />
                           </View>
 
@@ -194,26 +213,18 @@ export default function OrgSelectionScreen() {
                           <View style={styles.orgInfo}>
                             <Text style={[
                               styles.orgName,
-                              selectedOrg === org.id && styles.orgNameSelected,
+                              selectedOrg === org.org_id && styles.orgNameSelected,
                             ]}>
                               {org.name}
                             </Text>
-                            <View style={styles.orgMeta}>
-                              <IconSymbol
-                                name="person.2.fill"
-                                size={14}
-                                color={Colors.textSecondary}
-                              />
-                              <Text style={styles.orgMembers}>{org.members} members</Text>
-                            </View>
                           </View>
 
                           {/* Checkbox */}
                           <View style={[
                             styles.checkbox,
-                            selectedOrg === org.id && styles.checkboxSelected,
+                            selectedOrg === org.org_id && styles.checkboxSelected,
                           ]}>
-                            {selectedOrg === org.id && (
+                            {selectedOrg === org.org_id && (
                               <IconSymbol name="checkmark" size={16} color="#FFFFFF" />
                             )}
                           </View>

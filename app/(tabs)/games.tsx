@@ -5,9 +5,7 @@ import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { BorderRadius, Colors, Spacing, Typography, Shadows } from '@/constants/theme';
-import { mockGames, mockTeams } from '@/data/mockData';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useAuth } from '@/contexts/AuthContext';
 import GameCard from '@/components/games/GameCard';
 import GameVideoModal from '@/components/games/GameVideoModal';
 import { Game } from '@/types/game';
@@ -17,9 +15,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Sentry from '@sentry/react-native';
 import { ComponentErrorBoundary } from '@/components/component-error-boundary';
 
-// Mock games for demo/fallback
-const MOCK_GAMES = mockGames;
-
 function GamesScreenContent() {
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [videoModalVisible, setVideoModalVisible] = useState(false);
@@ -28,7 +23,6 @@ function GamesScreenContent() {
   const [loading, setLoading] = useState(true);
   const [games, setGames] = useState<Game[]>([]);
   const [filteredGames, setFilteredGames] = useState<Game[]>([]);
-  const [usingMockData, setUsingMockData] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<any>(null);
 
@@ -38,7 +32,6 @@ function GamesScreenContent() {
   const [showSeasonPicker, setShowSeasonPicker] = useState(false);
 
   const { currentColors, isDark } = useTheme();
-  const { isDemoMode } = useAuth();
   const { width, height } = useWindowDimensions();
 
   // Responsive breakpoints
@@ -63,11 +56,14 @@ function GamesScreenContent() {
         const team = await teamService.getTeamById(teamId);
         setSelectedTeam(team);
       } else {
-        setSelectedTeam(mockTeams[0]);
+        // No team selected - set null and let UI show "Select a team" message
+        setSelectedTeam(null);
       }
     } catch (err) {
-      console.error('Failed to load team:', err);
-      setSelectedTeam(mockTeams[0]);
+      console.error('❌ Failed to load team:', err);
+      Sentry.captureException(err);
+      Alert.alert('Unable to Load Team', 'Could not connect to the server. Please try again.');
+      setSelectedTeam(null);
     }
   };
 
@@ -81,13 +77,6 @@ function GamesScreenContent() {
 
       setError(null);
 
-      if (isDemoMode) {
-        console.log('📦 Using mock games (Demo Mode)');
-        setGames(MOCK_GAMES);
-        setUsingMockData(true);
-        return;
-      }
-
       const orgId = await AsyncStorage.getItem('current_org_id');
       const teamId = await AsyncStorage.getItem('selected_team_id');
 
@@ -100,6 +89,12 @@ function GamesScreenContent() {
         limit: 30, // Load recent 30 games (covers most seasons)
         sort: 'game_date_desc' // Newest first
       });
+
+      console.log('✅ Games fetched:', data.length);
+
+      if (data.length === 0) {
+        console.log('📭 No games found - showing empty state');
+      }
 
       const transformedGames = data.map((game: any) => ({
         id: game.game_id,
@@ -121,20 +116,23 @@ function GamesScreenContent() {
       }));
 
       setGames(transformedGames);
-      setUsingMockData(false);
 
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to load games';
-
-      console.error('❌ API fetch failed, using mock data:', err);
-      setGames(MOCK_GAMES);
-      setUsingMockData(true);
-      setError('Unable to connect to server. Using sample data.');
-
+      console.error('❌ Failed to load games:', err);
       Sentry.captureException(err, {
         tags: { screen: 'games', action: 'load_games' },
-        extra: { isRefresh, errorMessage: errorMsg }
+        extra: { isRefresh }
       });
+
+      // Show error to user - DO NOT use mock data
+      Alert.alert(
+        'Unable to Load Games',
+        'Could not connect to the server. Please check your connection and try again.',
+        [{ text: 'OK' }]
+      );
+
+      // Set empty state
+      setGames([]);
 
     } finally {
       setLoading(false);
@@ -330,19 +328,6 @@ function GamesScreenContent() {
                   </View>
                 </View>
               </LinearGradient>
-            </Animated.View>
-          )}
-
-          {/* Mock Data Banner */}
-          {usingMockData && (
-            <Animated.View
-              entering={FadeIn.duration(300)}
-              style={[styles.mockDataBanner, { backgroundColor: Colors.warning + '15' }]}
-            >
-              <IconSymbol name="info.circle.fill" size={20} color={Colors.warning} />
-              <Text style={[styles.mockDataText, { color: Colors.warning }]}>
-                {isDemoMode ? 'Demo Mode - Sample Games' : 'Using sample data - API unavailable'}
-              </Text>
             </Animated.View>
           )}
 
