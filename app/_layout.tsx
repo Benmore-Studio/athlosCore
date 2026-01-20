@@ -6,6 +6,7 @@ import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { OfflineProvider } from '@/contexts/OfflineContext';
 import OfflineBanner from '@/components/OfflineBanner';
 import { useDeviceOrientation } from '@/hooks/useDeviceOrientation';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import React from 'react';
 import { initializeSentry } from '@/config/sentry';
@@ -57,14 +58,16 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   return (
-    <OfflineProvider>
-      <ThemeProvider>
-        <AuthProvider>
-          {/* All providers wrap RootLayoutNav */}
-          <RootLayoutNav />
-        </AuthProvider>
-      </ThemeProvider>
-    </OfflineProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <OfflineProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            {/* All providers wrap RootLayoutNav */}
+            <RootLayoutNav />
+          </AuthProvider>
+        </ThemeProvider>
+      </OfflineProvider>
+    </GestureHandlerRootView>
   );
 }
 

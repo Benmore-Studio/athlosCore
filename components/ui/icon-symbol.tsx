@@ -83,6 +83,20 @@ const MAPPING = {
   'bookmark.fill': 'bookmark',
   'folder.fill': 'folder',
   'photo.fill': 'photo',
+
+  // Tab bar & app icons
+  'sportscourt.fill': 'sports-basketball',
+  'chart.bar.fill': 'bar-chart',
+  'film.fill': 'movie',
+  'play.rectangle.fill': 'play-circle',
+  'play.circle.fill': 'play-circle-filled',
+  'plus.circle.fill': 'add-circle',
+  'eye.fill': 'visibility',
+  'eye.slash.fill': 'visibility-off',
+  'envelope.fill': 'email',
+  'lock.fill': 'lock',
+  'wifi.slash': 'wifi-off',
+  'text.alignleft': 'format-align-left',
 } as IconMapping;
 
 interface IconSymbolProps {

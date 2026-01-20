@@ -11,6 +11,7 @@ import {
   Platform,
   Pressable,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -364,14 +365,16 @@ function UploadScreenContent() {
   }));
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <ScrollView 
-        contentContainerStyle={[styles.container, { backgroundColor: currentColors.background }]}
-        showsVerticalScrollIndicator={false}
+    <SafeAreaView style={{ flex: 1, backgroundColor: currentColors.background }} edges={['top']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
+        <ScrollView
+          contentContainerStyle={[styles.container, { backgroundColor: currentColors.background }]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
         {/* Header with gradient */}
         <Animated.View entering={FadeIn.duration(400)}>
           <LinearGradient
@@ -382,10 +385,18 @@ function UploadScreenContent() {
             style={styles.headerGradient}
           >
             <View style={styles.headerContent}>
+              {/* Back Button */}
+              <TouchableOpacity
+                onPress={() => router.back()}
+                style={[styles.backButton, { backgroundColor: currentColors.surface }]}
+                accessibilityLabel="Go back"
+              >
+                <IconSymbol name="chevron.left" size={20} color={currentColors.text} />
+              </TouchableOpacity>
               <View style={[styles.headerIconContainer, { backgroundColor: currentColors.primary }]}>
-                <IconSymbol 
-                  name="video.fill" 
-                  size={28} 
+                <IconSymbol
+                  name="video.fill"
+                  size={28}
                   color={Colors.textOnPrimary}
                 />
               </View>
@@ -657,8 +668,9 @@ function UploadScreenContent() {
             </View>
           </Animated.View>
         )}
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -671,21 +683,50 @@ export default function UploadScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
+  navBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    paddingTop: Spacing.xl,
+    borderBottomWidth: 1,
+  },
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navTitle: {
+    fontSize: Typography.headline,
+    fontWeight: '600',
+  },
+  navSpacer: {
+    width: 40,
+  },
+  scrollContent: {
     padding: Spacing.xl,
-    paddingTop: Spacing.xxl,
+    paddingTop: Spacing.md,
+    flexGrow: 1,
+  },
+  container: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 32,
     flexGrow: 1,
   },
   headerGradient: {
-    borderRadius: BorderRadius.xl,
-    marginBottom: Spacing.xl,
+    borderRadius: 16,
+    marginBottom: 24,
     overflow: 'hidden',
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: Spacing.lg,
-    gap: Spacing.md,
+    padding: 12,
+    gap: 12,
   },
   headerIconContainer: {
     width: 56,

@@ -180,8 +180,6 @@ export default function LoginScreen() {
                       autoCapitalize="none"
                       autoCorrect={false}
                       editable={!loading}
-                      onFocus={() => setFocusedInput('email')}
-                      onBlur={() => setFocusedInput(null)}
                       accessibilityLabel="Email address"
                       accessibilityHint="Enter your email address"
                     />
@@ -209,8 +207,6 @@ export default function LoginScreen() {
                       secureTextEntry={!showPassword}
                       editable={!loading}
                       autoCapitalize="none"
-                      onFocus={() => setFocusedInput('password')}
-                      onBlur={() => setFocusedInput(null)}
                       accessibilityLabel="Password"
                       accessibilityHint="Enter your password"
                     />
@@ -475,7 +471,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: Typography.callout,
     color: Colors.text,
-    height: '100%',
   },
 
   // Forgot password

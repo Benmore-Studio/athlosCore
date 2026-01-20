@@ -185,6 +185,7 @@ export default function RegisterScreen() {
               isTablet && isLandscape && styles.scrollContentLandscape,
             ]}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           >
             <View style={[
               styles.contentContainer,
@@ -268,8 +269,6 @@ export default function RegisterScreen() {
                         onChangeText={setName}
                         autoCapitalize="words"
                         editable={!loading}
-                        onFocus={() => setFocusedInput('name')}
-                        onBlur={() => setFocusedInput(null)}
                         accessibilityLabel="Full name"
                         accessibilityHint="Enter your full name"
                       />
@@ -298,8 +297,6 @@ export default function RegisterScreen() {
                         autoCapitalize="none"
                         autoCorrect={false}
                         editable={!loading}
-                        onFocus={() => setFocusedInput('email')}
-                        onBlur={() => setFocusedInput(null)}
                         accessibilityLabel="Email address"
                         accessibilityHint="Enter your email address"
                       />
@@ -327,8 +324,6 @@ export default function RegisterScreen() {
                         secureTextEntry={!showPassword}
                         autoCapitalize="none"
                         editable={!loading}
-                        onFocus={() => setFocusedInput('password')}
-                        onBlur={() => setFocusedInput(null)}
                         accessibilityLabel="Password"
                         accessibilityHint="Enter a password with at least 6 characters"
                       />
@@ -367,8 +362,6 @@ export default function RegisterScreen() {
                         secureTextEntry={!showConfirmPassword}
                         autoCapitalize="none"
                         editable={!loading}
-                        onFocus={() => setFocusedInput('confirmPassword')}
-                        onBlur={() => setFocusedInput(null)}
                         accessibilityLabel="Confirm password"
                         accessibilityHint="Re-enter your password"
                       />
